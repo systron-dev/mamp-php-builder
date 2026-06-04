@@ -15,7 +15,8 @@ set -e
 VERSION="$1"
 ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
 MAMP=/Applications/MAMP/Library
-SRC="/tmp/php-build/php-${VERSION}"
+BUILD="/tmp/php-build-${USER:-mamp}"
+SRC="${BUILD}/php-${VERSION}"
 PREFIX="/Applications/MAMP/bin/php/php${VERSION}"
 
 if [ -z "$VERSION" ]; then

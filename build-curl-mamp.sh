@@ -12,11 +12,12 @@
 
 set -e
 
+CURL_VERSION="${1:-8.7.1}"
 ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
 MAMP=/Applications/MAMP/Library
-CURL_VERSION="${1:-8.7.1}"
-SRC="/tmp/php-build/curl-${CURL_VERSION}"
-TARBALL="/tmp/php-build/curl-${CURL_VERSION}.tar.gz"
+BUILD="/tmp/php-build-${USER:-mamp}"
+SRC="${BUILD}/curl-${CURL_VERSION}"
+TARBALL="${BUILD}/curl-${CURL_VERSION}.tar.gz"
 
 echo "==> Building curl ${CURL_VERSION} for MAMP (OpenSSL 3 static)"
 
@@ -33,13 +34,14 @@ fi
 
 # Download source if needed
 if [ ! -d "$SRC" ]; then
+  mkdir -p "$BUILD"
   if [ ! -f "$TARBALL" ]; then
     echo "==> Downloading curl ${CURL_VERSION}..."
-    cd /tmp/php-build
+    cd "$BUILD"
     curl -L -O "https://curl.se/download/curl-${CURL_VERSION}.tar.gz"
   fi
   echo "==> Extracting..."
-  cd /tmp/php-build
+  cd "$BUILD"
   tar xzf "curl-${CURL_VERSION}.tar.gz"
 fi
 

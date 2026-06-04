@@ -37,18 +37,20 @@ Intel archives must be built separately on an Intel Mac using the same scripts (
 bash build-curl-mamp.sh
 
 # 3. Download PHP source, then configure + make
+BUILD="/tmp/php-build-${USER:-mamp}"
+mkdir -p "$BUILD"
 curl -LO https://www.php.net/distributions/php-8.3.31.tar.gz
-tar xzf php-8.3.31.tar.gz -C /tmp/php-build/
+tar xzf php-8.3.31.tar.gz -C "$BUILD"
 bash build-php-mamp.sh 8.3.31
-cd /tmp/php-build/php-8.3.31 && make -j$(sysctl -n hw.ncpu) && make install
+cd "$BUILD/php-8.3.31" && make -j$(sysctl -n hw.ncpu) && make install
 
-# 4. Build extensions
+# 4. Build extensions (these are automatically signed ad-hoc on macOS)
 bash build-mamp-ext.sh all
 
 # 5. Create conf files (see BUILD.md Step 4)
 ```
 
-See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU Makefile fix, OpenSSL dylib hiding, conf file generation, and all known gotchas.
+See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU Makefile fix, OpenSSL dylib hiding, conf file generation, macOS code-signing, and all known gotchas.
 
 ## Requirements
 
@@ -67,3 +69,8 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 | 8.5.6  | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 arm64 |
 
 Extensions marked as "disabled by default": mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop — present as `.so` files, commented out in `php.ini` / `php.ini.temp`. Enable manually when needed.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+

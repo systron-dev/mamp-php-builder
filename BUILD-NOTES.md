@@ -210,6 +210,9 @@ PHP 8.2.31 built and installed to `/Applications/MAMP/bin/php/php8.2.31/`.
 
 PHP 8.5.6 built and installed to `/Applications/MAMP/bin/php/php8.5.6/`.
 
+> [!IMPORTANT]
+> **MAMP PRO GUI Compatibility Limit:** PHP 8.5.x is **not** supported by the MAMP PRO v6.x GUI/dropdown list. This is due to hardcoded/compiled-in version checks inside the MAMP PRO app binary that filter out version numbers `>= 8.5.0`. It cannot be spoofed using symlinks or binary patching due to internal app constraints, but it remains fully usable directly via the CLI (`/Applications/MAMP/bin/php/php8.5.6/bin/php`) or via manual Apache/CGI configurations.
+
 ### PHP 8.5-specific changes vs 8.4
 
 1. **OPcache static** — `--enable-opcache` removed as configure option; OPcache always compiled in statically. No `opcache.so` file. Comment out the `zend_extension=.../opcache.so` line in php.ini. OPcache settings (opcache.enable etc.) still apply via ini.
@@ -303,6 +306,10 @@ Extension dirs:
 9. **memcached zlib** — `--with-zlib-dir=$MAMPLIB` missing; fixed in script
 
 10. **cmake missing** — script auto-downloads cmake 3.29.6 universal binary from cmake.org to `/tmp/php-build/cmake-bin/`
+
+11. **imagick segfault on phpinfo() / php --info** — ImageMagick detected optional dynamic delegates from the host system (like Graphviz/`gvc` or `libraw`) which are not packed into MAMP. The linker resolved them using dynamic lookup, resulting in symbol references to `NULL` (like `libraw_version` in `RegisterDNGImage` or `gvContext` in `RegisterDOTImage`) which segfaulted when printing module info. Fixed by passing explicit `--without-` flags for all optional delegates (`--without-gvc`, `--without-raw`, `--without-fontconfig`, `--without-pango`, etc.) during ImageMagick configuration, producing a minimal static library.
+
+12. **Build folder permissions** — Multi-user shared machines caused permission conflicts inside `/tmp/php-build/` (e.g. running scripts under different accounts). Fixed by updating the scripts to use `/tmp/php-build-${USER}` dynamically.
 
 ### C libraries built (in /tmp/php-build/ext-deps/)
 - libyaml 0.2.5 ✓

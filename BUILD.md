@@ -5,15 +5,16 @@ MAMP PRO v6.9 no longer ships newer PHP packages — updates are v7.x-only. This
 **Tested with:** PHP 8.2.31, PHP 8.3.31, PHP 8.4.21, PHP 8.5.6 on MAMP v6.9, macOS Sequoia (arm64)  
 **Intel status:** Steps verified equivalent — only arch flags differ (noted inline)
 
-### Architecture variable
+### Environment variables
 
 Run this first in every shell session before following this guide:
 
 ```bash
-ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
+ARCH=$(uname -m)                     # arm64 on Apple Silicon, x86_64 on Intel
+BUILD="/tmp/php-build-${USER:-mamp}" # Build workspace directory
 ```
 
-All arch-specific commands below use `$ARCH`.
+All commands below use these variables.
 
 ---
 
@@ -36,7 +37,7 @@ All arch-specific commands below use `$ARCH`.
 
 ### Constraint: fully self-contained in `/Applications/MAMP/Library`
 
-MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/Library` — no Homebrew or MacPorts paths at runtime. Every dependency is either already present in MAMP Library or built from source and installed there (or into `/tmp/php-build/ext-deps/` for extension-only deps).
+MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/Library` — no Homebrew or MacPorts paths at runtime. Every dependency is either already present in MAMP Library or built from source and installed there (or into `$BUILD/ext-deps/` for extension-only deps).
 
 ### Directory layout
 
@@ -53,7 +54,7 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
     ...extensions/no-debug-non-zts-20240924/
   php8.5.6/
     ...extensions/no-debug-non-zts-20250925/
-/tmp/php-build/                       build workspace
+/tmp/php-build-${USER:-mamp}/         build workspace ($BUILD)
   build-php-mamp.sh                  PHP configure script
   build-curl-mamp.sh                 libcurl rebuild script
   build-mamp-ext.sh                  extension build script
@@ -88,8 +89,8 @@ ls /opt/local/share/libtool/build-aux/config.sub
 
 ### Download PHP source
 ```bash
-mkdir -p /tmp/php-build
-cd /tmp/php-build
+mkdir -p "$BUILD"
+cd "$BUILD"
 curl -LO https://www.php.net/distributions/php-8.2.31.tar.gz
 curl -LO https://www.php.net/distributions/php-8.3.31.tar.gz
 curl -LO https://www.php.net/distributions/php-8.4.21.tar.gz
@@ -107,7 +108,7 @@ tar xzf php-8.5.6.tar.gz
 MAMP ships OpenSSL 1.0.2u — too old for PHP 8.3+. Build OpenSSL 3.x static libs into MAMP Library.
 
 ```bash
-cd /tmp/php-build
+cd "$BUILD"
 curl -LO https://www.openssl.org/source/openssl-3.3.2.tar.gz
 tar xzf openssl-3.3.2.tar.gz
 cd openssl-3.3.2
@@ -137,7 +138,7 @@ ls /Applications/MAMP/Library/lib/libssl.a   # must exist
 MAMP's bundled libcurl 7.68.0 was built against OpenSSL 1.0.2u. Rebuild against OpenSSL 3.
 
 ```bash
-bash /tmp/php-build/build-curl-mamp.sh 8.7.1
+bash "$BUILD/build-curl-mamp.sh" 8.7.1
 ```
 
 **What it does:**
@@ -154,13 +155,13 @@ bash /tmp/php-build/build-curl-mamp.sh 8.7.1
 ### Run configure
 
 ```bash
-bash /tmp/php-build/build-php-mamp.sh 8.2.31
+bash "$BUILD/build-php-mamp.sh" 8.2.31
 # or
-bash /tmp/php-build/build-php-mamp.sh 8.3.31
+bash "$BUILD/build-php-mamp.sh" 8.3.31
 # or
-bash /tmp/php-build/build-php-mamp.sh 8.4.21
+bash "$BUILD/build-php-mamp.sh" 8.4.21
 # or
-bash /tmp/php-build/build-php-mamp.sh 8.5.6
+bash "$BUILD/build-php-mamp.sh" 8.5.6
 ```
 
 The script runs `./configure` only — it does **not** run `make`.
@@ -179,7 +180,7 @@ MAMP has ICU 56 with versioned symbols (`u_sprintf_56` in `libicuio`). PHP 8.3 n
 # PHP 8.3 only:
 python3 -c "
 import re
-f = '/tmp/php-build/php-8.3.31/Makefile'
+f = '${BUILD}/php-8.3.31/Makefile'
 c = open(f).read()
 open(f, 'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))
 "
@@ -188,7 +189,7 @@ open(f, 'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MUL
 ### Run make
 
 ```bash
-cd /tmp/php-build/php-8.3.31    # or php-8.4.21
+cd "$BUILD/php-8.3.31"    # or php-8.4.21
 
 MAMP=/Applications/MAMP/Library
 mv $MAMP/lib/libssl.dylib $MAMP/lib/libssl.dylib.hidden
@@ -211,7 +212,10 @@ make install
 ```bash
 # After make install, the Apache module is at modules/libphp.so
 # Copy to MAMP's Apache modules directory:
-cp /tmp/php-build/php-8.3.31/modules/libphp.so /Applications/MAMP/Library/modules/
+cp "$BUILD/php-8.3.31/modules/libphp.so" /Applications/MAMP/Library/modules/
+
+# Code-sign the module to prevent Apache crashes/rejections on macOS
+codesign --force --sign - /Applications/MAMP/Library/modules/libphp.so
 ```
 
 ---
@@ -221,15 +225,15 @@ cp /tmp/php-build/php-8.3.31/modules/libphp.so /Applications/MAMP/Library/module
 ### Run all (C deps + PECL extensions)
 
 ```bash
-bash /tmp/php-build/build-mamp-ext.sh all
+bash "$BUILD/build-mamp-ext.sh" all
 ```
 
 Or build phases separately:
 
 ```bash
-bash /tmp/php-build/build-mamp-ext.sh deps    # C libraries only
-bash /tmp/php-build/build-mamp-ext.sh ext     # PECL extensions for 8.2 + 8.3 + 8.4
-bash /tmp/php-build/build-mamp-ext.sh ext85   # PECL extensions for 8.5 only
+bash "$BUILD/build-mamp-ext.sh" deps    # C libraries only
+bash "$BUILD/build-mamp-ext.sh" ext     # PECL extensions for 8.2 + 8.3 + 8.4
+bash "$BUILD/build-mamp-ext.sh" ext85   # PECL extensions for 8.5 only
 ```
 
 > **PHP 8.5 note:** Run `ext85` separately after placing compat shims (see [PHP 8.5 gotchas](#php-85-gotchas) below).
@@ -237,13 +241,13 @@ bash /tmp/php-build/build-mamp-ext.sh ext85   # PECL extensions for 8.5 only
 Or individual targets:
 
 ```bash
-bash /tmp/php-build/build-mamp-ext.sh imagick
-bash /tmp/php-build/build-mamp-ext.sh memcached
-bash /tmp/php-build/build-mamp-ext.sh pgsql
-bash /tmp/php-build/build-mamp-ext.sh sysv    # sysvsem + sysvshm + sysvmsg + shmop
+bash "$BUILD/build-mamp-ext.sh" imagick
+bash "$BUILD/build-mamp-ext.sh" memcached
+bash "$BUILD/build-mamp-ext.sh" pgsql
+bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 ```
 
-### C library dependencies built (to `/tmp/php-build/ext-deps/`)
+### C library dependencies built (to `$BUILD/ext-deps/`)
 
 | Library              | Version  | Notes                                            |
 |----------------------|----------|--------------------------------------------------|
@@ -399,19 +403,37 @@ otool -L /Applications/MAMP/bin/php/php8.3.31/bin/php | grep -v MAMP | grep -v /
 
 ## Adding Another PHP Version
 
-1. **Download + extract source** to `/tmp/php-build/php-X.Y.Z/`
+1. **Download + extract source** to `"$BUILD/php-X.Y.Z/"`
 2. **Check API hash** — run `php -i | grep extension_dir` on an existing build for that minor, or look up the PHP API version constant
-3. **Run configure:** `bash build-php-mamp.sh X.Y.Z`
+3. **Run configure:** `bash "$BUILD/build-php-mamp.sh" X.Y.Z`
 5. **Fix Makefile** (PHP 8.3 only — add `-licuio` to `EXTRA_LIBS`)
 6. **Hide OpenSSL dylinks, run make, restore**
 7. **`make install`**
 8. **Copy `libphp.so`** to `/Applications/MAMP/Library/modules/`
 9. **Create conf files:** `php.ini` (fix paths), `pear.conf` (Python script), `php.ini.temp` (string replace)
-10. **Build extensions:** `bash build-mamp-ext.sh all` (re-runs cleanly; already-built C deps are cached)
+10. **Build extensions:** `bash "$BUILD/build-mamp-ext.sh" all` (re-runs cleanly; already-built C deps are cached)
 
 ---
 
 ## Known Issues & Gotchas
+
+### Multi-User / Shared Machine Workspace Conflicts
+
+If multiple users run the build scripts on the same machine, building inside `/tmp/php-build` directly causes permission errors due to mismatched file ownership. The scripts resolve this by using a dynamic path: `BUILD="/tmp/php-build-${USER:-mamp}"`.
+
+### macOS Code-Signing (SIGKILL / Exit Code 137)
+
+Compiled `.so` extensions on macOS must be signed ad-hoc to satisfy macOS security policies. If unsigned, loading the extension will trigger a silent crash with `Exit Code 137` (SIGKILL).
+* `build-mamp-ext.sh` now automatically runs `codesign --force --sign -` on all built modules.
+* If you build or copy a `.so` file manually, sign it using:
+  ```bash
+  codesign --force --sign - /path/to/extension.so
+  ```
+
+### ImageMagick Host Machine Delegate Crashes (Segmentation Fault / Exit Code 139)
+
+If ImageMagick configure auto-detects dynamic libraries from the host system (e.g. Graphviz/`gvc`, `libraw`, `fontconfig`, `pango`) which are not included in the standard MAMP environment, the resulting static ImageMagick library uses dynamic lookup. At runtime, these dynamic symbols resolve to `NULL`, causing `php --info` or `phpinfo()` to crash with a segmentation fault when compiling imagick info.
+* **Solution:** Explicitly disable all host-system optional delegates during ImageMagick configure inside `build-mamp-ext.sh` (`--without-gvc`, `--without-raw`, `--without-fontconfig`, `--without-pango`, etc.).
 
 ### OpenSSL dylib symlinks must be hidden during `make`
 
@@ -476,7 +498,7 @@ phpize-based builds don't search `$MAMPLIB/include`. Fix: add `CPPFLAGS="-I$MAMP
 
 ### cmake not installed
 
-`build-mamp-ext.sh` auto-downloads cmake 3.29.6 universal binary to `/tmp/php-build/cmake-bin/` if `cmake` is not on PATH.
+`build-mamp-ext.sh` auto-downloads cmake 3.29.6 universal binary to `"$BUILD/cmake-bin/"` if `cmake` is not on PATH.
 
 ### pear.conf is PHP serialized — string lengths matter
 
@@ -488,7 +510,10 @@ If you manually edit `pear.conf`, update the `s:N:` length prefix for every stri
 
 `php.ini.temp` uses `MAMP_xxx_MAMP` placeholders for MAMP-UI-managed extensions (apcu, imagick, tidy, etc.). All other extension lines (`extension=foo.so`) are passed through verbatim into the generated ini. Non-standard or opt-in extensions are commented (`; extension=foo.so`) so they don't load by default.
 
-**PHP 8.5 + OPcache:** `php.ini.temp` contains a `MAMP_OPcache_MAMP` placeholder pointing to `opcache.so`. Since OPcache is static in PHP 8.5, no `opcache.so` exists. After MAMP PRO first activates 8.5 and generates `php8.5.6.ini`, manually comment out that `zend_extension` line.
+**PHP 8.5 + OPcache:** `php.ini.temp` contains a `MAMP_OPcache_MAMP` placeholder pointing to `opcache.so`. Since OPcache is static in PHP 8.5, no `opcache.so` exists.
+
+> [!WARNING]
+> **MAMP PRO GUI Compatibility Limit:** PHP 8.5.x is **not** supported by the MAMP PRO v6.x GUI/dropdown menu. The legacy app binary contains compiled-in version validations that filter out version numbers `>= 8.5.0` (even when spoofing directories or binaries). However, PHP 8.5.6 remains fully functional for command-line use (CLI) and custom Apache/CGI setups.
 
 ---
 

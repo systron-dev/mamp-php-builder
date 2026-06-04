@@ -17,7 +17,7 @@ EXT82=$PHP82/lib/php/extensions/no-debug-non-zts-20220829
 EXT83=$PHP83/lib/php/extensions/no-debug-non-zts-20230831
 EXT84=$PHP84/lib/php/extensions/no-debug-non-zts-20240924
 EXT85=$PHP85/lib/php/extensions/no-debug-non-zts-20250925
-BUILD=/tmp/php-build
+BUILD="/tmp/php-build-${USER:-mamp}"
 DEPS=$BUILD/ext-deps        # static libs installed here
 SRC=$BUILD/ext-src          # source trees unpacked here
 NCPU=$(sysctl -n hw.ncpu)
@@ -137,8 +137,22 @@ _build_ext_one() {
   CPPFLAGS="${CPPFLAGS:+$CPPFLAGS }-I$MAMPLIB/include" \
     ./configure --with-php-config="$phpdir/bin/php-config" $configure_args || return 1
   make -j$NCPU || return 1
-  cp modules/*.so "$extdir/" || return 1
-  log "    ✓ copied to $extdir"
+  if [ "$(uname)" = "Darwin" ]; then
+    log "    → Code-signing modules/*.so"
+    for so_file in modules/*.so; do
+      if [ -f "$so_file" ]; then
+        codesign --force --sign - "$so_file"
+      fi
+    done
+  fi
+  if cp modules/*.so "$extdir/" 2>/dev/null; then
+    log "    ✓ copied to $extdir"
+  else
+    local local_dist="$(cd "$(dirname "$0")" && pwd)/dist/$(basename $phpdir)"
+    mkdir -p "$local_dist"
+    cp modules/*.so "$local_dist/"
+    warn "    ! Permission denied writing to $extdir. Copied to $local_dist instead."
+  fi
 }
 
 # Build extension for all PHP versions
@@ -335,6 +349,24 @@ build_imagemagick() {
     --with-webp="$DEPS" \
     --with-freetype="$DEPS" \
     --without-heic \
+    --without-raw \
+    --without-gvc \
+    --without-fontconfig \
+    --without-pango \
+    --without-xml \
+    --without-lcms \
+    --without-openjp2 \
+    --without-lqr \
+    --without-openexr \
+    --without-fftw \
+    --without-flif \
+    --without-fpx \
+    --without-wmf \
+    --without-autotrace \
+    --without-dps \
+    --without-rsvg \
+    --without-uhdr \
+    --without-gslib \
     CPPFLAGS="-I$DEPS/include -I$MAMPLIB/include" \
     LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib" \
     PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$MAMPLIB/lib/pkgconfig"
@@ -662,7 +694,7 @@ case "$TARGET" in
   libtiff)      build_libtiff ;;
   libwebp)      build_libwebp ;;
   freetype)     build_freetype ;;
-  imagemagick)  build_libjpeg; build_libpng; build_libtiff; build_libwebp; build_freetype; build_imagemagick ;;
+  imagemagick)  build_imagemagick ;;
   libyaz)       build_libyaz ;;
   deps)         build_all_deps ;;
 
