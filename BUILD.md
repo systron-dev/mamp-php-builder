@@ -79,8 +79,13 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 xcode-select --install
 ```
 
-### MacPorts (for `config.sub` fix only)
-Needed to supply a modern `config.sub`/`config.guess` when building libmcrypt.
+### MacPorts (Recommended Building Basis)
+MacPorts is the recommended package manager and provides the best environment/basis for compiling these dependencies. Install the required libraries with:
+```bash
+sudo port install pkgconfig autoconf automake libtool openssl3 libxml2 curl zlib bzip2 libiconv pcre2 libjpeg-turbo libpng freetype webp icu libsodium libmcrypt oniguruma5 libzip
+```
+
+It is also used to supply a modern `config.sub`/`config.guess` when building libmcrypt:
 ```bash
 # Check it exists — only needed if building mcrypt extension
 ls /opt/local/share/libtool/build-aux/config.sub

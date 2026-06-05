@@ -58,7 +58,10 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 - macOS 12+ (Apple Silicon or Intel)
 - Xcode Command Line Tools
 - MAMP 6.9 installed at `/Applications/MAMP`
-- MacPorts (for libmcrypt build only — supplies modern `config.sub`)
+- MacPorts (recommended package manager and best basis for building — also supplies modern `config.sub` for libmcrypt)
+  ```bash
+  sudo port install pkgconfig autoconf automake libtool openssl3 libxml2 curl zlib bzip2 libiconv pcre2 libjpeg-turbo libpng freetype webp icu libsodium libmcrypt oniguruma5 libzip
+  ```
 
 ## Tested
 
