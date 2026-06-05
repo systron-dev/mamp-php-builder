@@ -5,6 +5,17 @@ MAMP="/Applications/MAMP/Library"
 BUILD="/tmp/php-build-${USER:-mamp}"
 VERSIONS=("8.2.31" "8.3.31" "8.4.21" "8.5.6")
 
+# Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
+if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
+  if [ -t 0 ]; then
+    read -p "Enter target macOS version for the build (e.g. 12.0, 13.0, 14.0, 15.0) [default: 12.0]: " TARGET_VAL
+    export MACOSX_DEPLOYMENT_TARGET="${TARGET_VAL:-12.0}"
+  else
+    export MACOSX_DEPLOYMENT_TARGET="12.0"
+  fi
+fi
+echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
+
 for version in "${VERSIONS[@]}"; do
   echo "=================================================="
   echo "==> Configuring PHP $version"
@@ -48,10 +59,23 @@ for version in "${VERSIONS[@]}"; do
   echo "==> Installing PHP $version"
   make install
 
-  # Copy and sign Apache module libphp.so
-  if [ -f "modules/libphp.so" ]; then
-    echo "==> Copying and signing modules/libphp.so"
-    cp "modules/libphp.so" "$MAMP/modules/"
+  # Copy and sign Apache module libphp.so into the PHP version's directory
+  # (MAMP GUI scans for and dynamically copies this file to switch versions)
+  LIBPHP_SRC=""
+  if [ -f "libs/libphp.so" ]; then
+    LIBPHP_SRC="libs/libphp.so"
+  elif [ -f "modules/libphp.so" ]; then
+    LIBPHP_SRC="modules/libphp.so"
+  fi
+
+  if [ -n "$LIBPHP_SRC" ]; then
+    echo "==> Copying and signing Apache module libphp.so"
+    mkdir -p "/Applications/MAMP/bin/php/php${version}/modules"
+    cp "$LIBPHP_SRC" "/Applications/MAMP/bin/php/php${version}/modules/libphp.so"
+    codesign --force --sign - "/Applications/MAMP/bin/php/php${version}/modules/libphp.so"
+    
+    # Also copy to global modules as fallback
+    cp "$LIBPHP_SRC" "$MAMP/modules/"
     codesign --force --sign - "$MAMP/modules/libphp.so"
   fi
 done

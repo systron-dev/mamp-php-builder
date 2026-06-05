@@ -208,12 +208,16 @@ make install
 
 ### Copy libphp.so (Apache module)
 
-```bash
-# After make install, the Apache module is at modules/libphp.so
-# Copy to MAMP's Apache modules directory:
-cp "$BUILD/php-8.3.31/modules/libphp.so" /Applications/MAMP/Library/modules/
+MAMP GUI requires the Apache PHP module (`libphp.so`) to be located inside each individual PHP version's folder under `modules/libphp.so` to recognize it as a valid, web-enabled version. When you switch versions in the GUI, MAMP copies it to the global directory automatically.
 
-# Code-sign the module to prevent Apache crashes/rejections on macOS
+```bash
+# 1. Create the modules folder inside the PHP directory and copy it
+mkdir -p /Applications/MAMP/bin/php/php8.3.31/modules
+cp "$BUILD/php-8.3.31/libs/libphp.so" /Applications/MAMP/bin/php/php8.3.31/modules/libphp.so
+codesign --force --sign - /Applications/MAMP/bin/php/php8.3.31/modules/libphp.so
+
+# 2. Also copy to MAMP's global Apache modules directory as a fallback
+cp "$BUILD/php-8.3.31/libs/libphp.so" /Applications/MAMP/Library/modules/libphp.so
 codesign --force --sign - /Applications/MAMP/Library/modules/libphp.so
 ```
 
@@ -587,3 +591,32 @@ EOF
 | memcached  | 3.3.0               | **3.4.0**       |
 
 `build-mamp-ext.sh` uses the correct version automatically when building for PHP 8.5 via `ext85`.
+
+---
+
+## macOS Specific Build Gotchas
+
+### Missing Apache Build Directory (`/Applications/MAMP/Library/build/`)
+
+MAMP does not include the Apache HTTPD build directory (containing `config_vars.mk` and `instdso.sh`) that `apxs` requires to configure/compile third-party Apache modules (like `libphp.so`). When compiling on a clean machine:
+1. Re-create the build directory by downloading the matching Apache source (e.g. Apache 2.4.54 for MAMP 6.9), running `./configure --prefix=/Applications/MAMP/Library` (pointing at MAMP's `apr-1-config` and `apu-1-config`), and copying the output `build/*` to `/Applications/MAMP/Library/build/`.
+2. Copy `instdso.sh` from `/usr/share/httpd/build/instdso.sh` into `/Applications/MAMP/Library/build/`.
+3. Symlink `/Applications/MAMP/Library/build-1/libtool` to `/Applications/MAMP/Library/bin/libtool`.
+
+### `apxs` SAPI Installation Failure (`httpd.conf` target)
+
+During `make install` for PHP, `apxs` attempts to activate the module in `/Applications/MAMP/Library/conf/httpd.conf`. Since MAMP does not maintain its configuration files at this path, the command will fail:
+* **Fix:** Create a dummy file at `/Applications/MAMP/Library/conf/httpd.conf` populated with a placeholder directive preceded by a newline character (e.g. `\nLoadModule foo_module modules/mod_foo.so\n`). `apxs` parses this string regex pattern to locate insertion points; if it is not formatted exactly with a newline before `LoadModule`, the installation process will crash.
+
+### CXXFLAGS & System C++ Standard Library Overrides
+
+Do not specify `-isystem /Library/Developer/CommandLineTools/.../c++/v1` inside `CXXFLAGS`. Overriding standard C++ header lookups with absolute SDK paths disrupts standard C header resolution (like `<stdint.h>`), resulting in compile errors (e.g., `unknown type name int32_t`, `int8_t` or `UBool` definition issues in the `intl` extension). Let clang automatically resolve SDK headers:
+* **Fix:** Keep CXXFLAGS simple: `CXXFLAGS="-arch $ARCH"`.
+
+### macOS OS Version Backward Compatibility
+
+By default, Apple's clang compiles binaries targetting the host machine's macOS SDK version (e.g. macOS 15.4 Sequoia). Binaries linking against modern system libraries (using new system symbols like `strchrnul` introduced in 15.4) are not backward-compatible and will crash immediately with `dyld: Symbol not found` when run on older macOS versions:
+* **Fix:** If targetting older macOS versions (e.g. Monterey 12.x or Ventura 13.x), compile all dependencies, PHP, and extensions with the target environment variable set:
+  ```bash
+  export MACOSX_DEPLOYMENT_TARGET="12.0"
+  ```

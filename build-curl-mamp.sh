@@ -19,6 +19,17 @@ BUILD="/tmp/php-build-${USER:-mamp}"
 SRC="${BUILD}/curl-${CURL_VERSION}"
 TARBALL="${BUILD}/curl-${CURL_VERSION}.tar.gz"
 
+# Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
+if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
+  if [ -t 0 ]; then
+    read -p "Enter target macOS version for the build (e.g. 12.0, 13.0, 14.0, 15.0) [default: 12.0]: " TARGET_VAL
+    export MACOSX_DEPLOYMENT_TARGET="${TARGET_VAL:-12.0}"
+  else
+    export MACOSX_DEPLOYMENT_TARGET="12.0"
+  fi
+fi
+echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
+
 echo "==> Building curl ${CURL_VERSION} for MAMP (OpenSSL 3 static)"
 
 # Verify OpenSSL 3 static libs present

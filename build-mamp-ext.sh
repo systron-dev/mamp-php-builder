@@ -76,8 +76,18 @@ fi
 
 export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$MAMPLIB/lib/pkgconfig"
 export PATH="$DEPS/bin:$PHP85/bin:$PHP84/bin:$PHP83/bin:$PHP82/bin:$PATH"
-export MACOSX_DEPLOYMENT_TARGET=15.4
-export CXXFLAGS="-arch $ARCH -isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1"
+# Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
+if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
+  if [ -t 0 ]; then
+    read -p "Enter target macOS version for the build (e.g. 12.0, 13.0, 14.0, 15.0) [default: 12.0]: " TARGET_VAL
+    export MACOSX_DEPLOYMENT_TARGET="${TARGET_VAL:-12.0}"
+  else
+    export MACOSX_DEPLOYMENT_TARGET="12.0"
+  fi
+fi
+echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
+
+export CXXFLAGS="-arch $ARCH"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[BUILD]${NC} $*"; }
