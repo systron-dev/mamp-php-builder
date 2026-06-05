@@ -47,7 +47,8 @@ cd "$BUILD/php-8.3.31" && make -j$(sysctl -n hw.ncpu) && make install
 # 4. Build extensions (these are automatically signed ad-hoc on macOS)
 bash build-mamp-ext.sh all
 
-# 5. Create conf files (see BUILD.md Step 4)
+# 5. Create conf files (automatically registers config and PECL extensions)
+python3 configure-mamp-ini.py
 ```
 
 See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU Makefile fix, OpenSSL dylib hiding, conf file generation, macOS code-signing, and all known gotchas.
@@ -63,10 +64,10 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 
 | PHP | Extensions | macOS |
 |-----|-----------|-------|
-| 8.2.31 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 arm64 |
-| 8.3.31 | same as above | Sequoia 15 arm64 |
-| 8.4.21 | same as above | Sequoia 15 arm64 |
-| 8.5.6  | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 arm64 |
+| 8.2.31 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 (arm64 & x86_64) |
+| 8.3.31 | same as above | Sequoia 15 (arm64 & x86_64) |
+| 8.4.21 | same as above | Sequoia 15 (arm64 & x86_64) |
+| 8.5.6  | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 (arm64 & x86_64) |
 
 Extensions marked as "disabled by default": mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop — present as `.so` files, commented out in `php.ini` / `php.ini.temp`. Enable manually when needed.
 

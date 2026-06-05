@@ -76,7 +76,8 @@ fi
 
 export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$MAMPLIB/lib/pkgconfig"
 export PATH="$DEPS/bin:$PHP85/bin:$PHP84/bin:$PHP83/bin:$PHP82/bin:$PATH"
-export MACOSX_DEPLOYMENT_TARGET=12.0
+export MACOSX_DEPLOYMENT_TARGET=15.4
+export CXXFLAGS="-arch $ARCH -isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[BUILD]${NC} $*"; }
@@ -96,6 +97,13 @@ preflight() {
   [ -x "$PHP84/bin/phpize" ]        || { err "Missing $PHP84/bin/phpize"; fail=1; }
   [ -x "$PHP85/bin/phpize" ]        || { err "Missing $PHP85/bin/phpize"; fail=1; }
   [ $fail -eq 0 ] || exit 1
+
+  # Create php_smart_string.h shim for PHP 8.5
+  local smart_string_h="$PHP85/include/php/ext/standard/php_smart_string.h"
+  if [ -d "$(dirname "$smart_string_h")" ] && [ ! -f "$smart_string_h" ]; then
+    printf '#pragma once\n#include "Zend/zend_smart_string.h"\n' > "$smart_string_h"
+    log "Created php_smart_string.h shim for PHP 8.5"
+  fi
 }
 
 # ── OpenSSL dylib hide/restore ─────────────────────────────────────────────────
@@ -212,8 +220,8 @@ build_libmcrypt() {
   fetch_tar "https://sourceforge.net/projects/mcrypt/files/Libmcrypt/$LIBMCRYPT_VER/libmcrypt-$LIBMCRYPT_VER.tar.gz/download" "$DIR"
   cd "$SRC/$DIR"
   # config.sub too old for arm-apple-darwin — replace with MacPorts modern version
-  cp /opt/local/share/libtool/build-aux/config.sub config.sub
-  cp /opt/local/share/libtool/build-aux/config.guess config.guess 2>/dev/null || true
+  cp /opt/local/share/autoconf/build-aux/config.sub config.sub
+  cp /opt/local/share/autoconf/build-aux/config.guess config.guess 2>/dev/null || true
   chmod +x config.sub config.guess 2>/dev/null || true
   # clang compat: disable posix threads to avoid old pthread API issues
   CFLAGS="-std=gnu89 -Wno-implicit-function-declaration -Wno-implicit-int" \
@@ -253,12 +261,14 @@ build_libpq() {
   # Unset deployment target — PG 16 uses strchrnul which requires macOS 15.4+
   # The running system is macOS 15+ so this is safe
   local saved_target="${MACOSX_DEPLOYMENT_TARGET:-}"
-  unset MACOSX_DEPLOYMENT_TARGET
+  export MACOSX_DEPLOYMENT_TARGET=15.4
   # Build only static libpq.a — skip dylib (dylib check fails: OpenSSL calls atexit)
   make -j$NCPU -C src/interfaces/libpq libpq.a
   # Manual install — avoid 'make install' which triggers dylib build+check
   mkdir -p "$DEPS/lib" "$DEPS/include"
   cp src/interfaces/libpq/libpq.a "$DEPS/lib/"
+  cp src/common/libpgcommon.a "$DEPS/lib/"
+  cp src/port/libpgport.a "$DEPS/lib/"
   cp src/interfaces/libpq/libpq-fe.h src/interfaces/libpq/libpq-events.h "$DEPS/include/"
   cp src/include/postgres_ext.h "$DEPS/include/"
   # pg_config — needed by PHP pgsql configure
@@ -459,7 +469,7 @@ build_mcrypt_ext() {
   for phpdir in "$PHP83" "$PHP84" "$PHP85"; do
     local rand_h="$phpdir/include/php/ext/standard/php_rand.h"
     if [ ! -f "$rand_h" ]; then
-      printf '#pragma once\n#include "ext/standard/php_random.h"\n' > "$rand_h"
+      printf '#pragma once\n#include "ext/random/php_random.h"\n#ifndef php_rand\n#define php_rand() rand()\n#endif\n' > "$rand_h"
     fi
   done
   build_ext_both "$DIR" "--with-mcrypt=$DEPS"
@@ -608,7 +618,7 @@ build_mcrypt_ext_85() {
   local DIR="$SRC/mcrypt-$MCRYPT_VER"
   local rand_h="$PHP85/include/php/ext/standard/php_rand.h"
   if [ ! -f "$rand_h" ]; then
-    printf '#pragma once\n#include "ext/standard/php_random.h"\n' > "$rand_h"
+    printf '#pragma once\n#include "ext/random/php_random.h"\n#ifndef php_rand\n#define php_rand() rand()\n#endif\n' > "$rand_h"
   fi
   build_ext_85only "$DIR" "--with-mcrypt=$DEPS"
 }

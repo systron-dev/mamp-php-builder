@@ -149,10 +149,10 @@ cd "$SRC"
   --with-iconv=$MAMP \
   --with-gettext=$MAMP \
   --enable-gd \
-  --with-external-pcre=$MAMP \
   --with-ldap=$MAMP \
   --with-ldap-sasl=$MAMP \
   CFLAGS="-arch $ARCH" \
+  CXXFLAGS="-arch $ARCH -isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1" \
   LDFLAGS="-arch $ARCH -L$MAMP/lib" \
   KERBEROS_CFLAGS="-I/usr/include" \
   KERBEROS_LIBS="-lkrb5" \

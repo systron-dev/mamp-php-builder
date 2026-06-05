@@ -2,8 +2,7 @@
 
 MAMP PRO v6.9 no longer ships newer PHP packages — updates are v7.x-only. This guide covers building PHP from source and installing it into MAMP's directory structure on both Apple Silicon (arm64) and Intel (x86_64).
 
-**Tested with:** PHP 8.2.31, PHP 8.3.31, PHP 8.4.21, PHP 8.5.6 on MAMP v6.9, macOS Sequoia (arm64)  
-**Intel status:** Steps verified equivalent — only arch flags differ (noted inline)
+**Tested with:** PHP 8.2.31, PHP 8.3.31, PHP 8.4.21, PHP 8.5.6 on MAMP v6.9, macOS Sequoia (arm64 and x86_64)  
 
 ### Environment variables
 
@@ -296,15 +295,37 @@ bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 
 ## Step 4 — Install Conf Files
 
-Three files are needed in `conf/` for each PHP version. `php.ini` is handled by `make install`; the other two must be created manually.
+Three files are needed in `conf/` for each PHP version: `php.ini`, `pear.conf`, and `php.ini.temp`.
 
-### php.ini
+### Recommended: Automatic Configuration
+
+We provide a Python script `configure-mamp-ini.py` that automatically generates and configures all three files for all PHP versions (`8.2.31`, `8.3.31`, `8.4.21`, and `8.5.6`).
+
+It automatically:
+- Creates the missing `conf/` directories.
+- Dynamically updates serialized paths and string lengths in `pear.conf`.
+- Formats and injects the complete extension policies for live and template configs.
+- Comments out deprecated session settings (`session.sid_length = 26` and `session.sid_bits_per_character = 5`) for PHP 8.4+ to prevent startup warnings.
+- Disables OPcache dynamic loading in PHP 8.5.6 (since it is statically compiled).
+
+To generate configurations for all versions, simply run:
+```bash
+python3 configure-mamp-ini.py
+```
+
+---
+
+### Fallback: Manual File Details
+
+If you wish to configure files manually or understand the underlying logic:
+
+#### php.ini
 
 `make install` creates `conf/php.ini`. Edit it to fix:
 - `extension_dir` path (correct version + API hash)
 - `zend_extension` paths for opcache and xdebug
 
-#### Extension policy (mirrors MAMP 8.2/8.3 reference defaults)
+##### Extension policy (mirrors MAMP 8.2/8.3 reference defaults)
 
 **Always on** (hardcoded `extension=`):
 - `pgsql.so`, `pdo_pgsql.so`
@@ -323,7 +344,7 @@ Three files are needed in `conf/` for each PHP version. `php.ini` is handled by 
 ;extension=shmop.so         ; POSIX shared memory ops
 ```
 
-### pear.conf
+#### pear.conf
 
 PHP serialized format — string lengths must be recalculated. Use this script:
 
@@ -342,34 +363,34 @@ def update_pear_conf(content, old_ver, new_ver, old_hash=None, new_hash=None):
     return re.sub(r's:\d+:"([^"]*)"', replace_serialized_str, content)
 
 # Use closest existing version as base (same minor preferred)
-with open('/Applications/MAMP/bin/php/php8.3.0/conf/pear.conf') as f:
+with open('/Applications/MAMP/bin/php/php8.2.0/conf/pear.conf') as f:
     base = f.read()
 
 # Same API hash (same minor version):
-result = update_pear_conf(base, 'php8.3.0', 'php8.3.31')
+result = update_pear_conf(base, 'php8.2.0', 'php8.2.31')
 
 # Different API hash (new minor/major):
-# result = update_pear_conf(base, 'php8.3.0', 'php8.4.21',
-#     'no-debug-non-zts-20230831', 'no-debug-non-zts-20240924')
+# result = update_pear_conf(base, 'php8.2.0', 'php8.3.31',
+#     'no-debug-non-zts-20220829', 'no-debug-non-zts-20230831')
 
 with open('/Applications/MAMP/bin/php/php8.3.31/conf/pear.conf', 'w') as f:
     f.write(result)
 ```
 
-### php.ini.temp
+#### php.ini.temp
 
 MAMP PRO's template file (contains `MAMP_xxx_MAMP` placeholders). Copy and substitute:
 
 ```python
-with open('/Applications/MAMP/bin/php/php8.3.0/conf/php.ini.temp') as f:
+with open('/Applications/MAMP/bin/php/php8.2.0/conf/php.ini.temp') as f:
     base = f.read()
 
 # Same API hash:
-result = base.replace('php8.3.0', 'php8.3.31')
+result = base.replace('php8.2.0', 'php8.2.31')
 
 # Different API hash:
-# result = base.replace('php8.3.0', 'php8.4.21') \
-#              .replace('no-debug-non-zts-20230831', 'no-debug-non-zts-20240924')
+# result = base.replace('php8.2.0', 'php8.3.31') \
+#              .replace('no-debug-non-zts-20220829', 'no-debug-non-zts-20230831')
 
 with open('/Applications/MAMP/bin/php/php8.3.31/conf/php.ini.temp', 'w') as f:
     f.write(result)

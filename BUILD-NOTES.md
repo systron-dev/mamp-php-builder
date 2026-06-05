@@ -1,13 +1,13 @@
 ---
 name: mamp-php-build
-description: "PHP 8.2.31, 8.3.31, 8.4.21, 8.5.6 built from source for MAMP v6.9 on Apple Silicon — status, constraints, and lessons learned"
+description: "PHP 8.2.31, 8.3.31, 8.4.21, 8.5.6 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 3aba1562-b5c3-44a5-b50e-3e6e54ef7924
 ---
 
-PHP 8.2.31, 8.3.31, 8.4.21, and 8.5.6 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on Apple Silicon (arm64).
+PHP 8.2.31, 8.3.31, 8.4.21, and 8.5.6 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
 
 **Why:** MAMP PRO v6.9 no longer offers newer PHP packages for download; only v7.x gets updates. Homebrew packages were rejected — all deps must be self-contained in `/Applications/MAMP/Library`.
 
@@ -49,11 +49,18 @@ PHP 8.2.31, 8.3.31, 8.4.21, and 8.5.6 successfully built from source and install
 
 ## Post-Install Per Version
 
+All post-install files (`php.ini`, `pear.conf`, `php.ini.temp`) can be configured automatically for all versions by running:
+```bash
+python3 configure-mamp-ini.py
+```
+
+Otherwise, if you choose to edit or configure them manually:
+
 ### 1. libphp.so
 Copy `modules/libphp.so` from `/Applications/MAMP/Library/modules/libphp.so` after `make install`.
 
 ### 2. conf/php.ini
-Copy from nearest existing version. Fix `extension_dir` and `zend_extension` paths. Disable `extension=imap.so`, `extension=pgsql.so`, `extension=pdo_pgsql.so` (no C libs).
+Copy from nearest existing version. Fix `extension_dir` and `zend_extension` paths. Disable `extension=imap.so` (no C libs).
 
 ### 3. conf/pear.conf (MISSING from fresh build — must create manually)
 PHP-serialized format — string lengths must be recalculated when version string length changes.
