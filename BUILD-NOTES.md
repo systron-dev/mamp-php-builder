@@ -1,13 +1,13 @@
 ---
 name: mamp-php-build
-description: "PHP 8.2.31, 8.3.31, 8.4.21, 8.5.6 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
+description: "PHP 8.2.32, 8.3.32, 8.4.23, 8.5.8 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 3aba1562-b5c3-44a5-b50e-3e6e54ef7924
 ---
 
-PHP 8.2.31, 8.3.31, 8.4.21, and 8.5.6 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
+PHP 8.2.32, 8.3.32, 8.4.23, and 8.5.8 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
 
 **Why:** MAMP PRO v6.9 no longer offers newer PHP packages for download; only v7.x gets updates. Homebrew packages were rejected — all deps must be self-contained in `/Applications/MAMP/Library`.
 
@@ -40,7 +40,7 @@ PHP 8.2.31, 8.3.31, 8.4.21, and 8.5.6 successfully built from source and install
 
 3. **Add `-licuio` to EXTRA_LIBS** — MAMP has ICU 56 with versioned symbols (`u_sprintf_56` in `libicuio`). PHP 8.3 needs explicit `-licuio`; PHP 8.4 adds it automatically.
    ```bash
-   python3 -c "import re; f='/tmp/php-build/php-8.3.31/Makefile'; c=open(f).read(); open(f,'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))"
+   python3 -c "import re; f='/tmp/php-build/php-8.3.32/Makefile'; c=open(f).read(); open(f,'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))"
    ```
 
 4. **PHP 8.4 removed flags**: `--with-zlib-dir` and `--with-kerberos` — build script handles this with `$ZLIB_DIR_FLAG` and `$KERBEROS_FLAG` conditionals.
@@ -85,13 +85,13 @@ with open('/Applications/MAMP/bin/php/php8.3.0/conf/pear.conf') as f:
     base = f.read()
 
 # For same API hash (same minor):
-result = update_pear_conf(base, 'php8.3.0', 'php8.3.31')
+result = update_pear_conf(base, 'php8.3.0', 'php8.3.32')
 
 # For different API hash (new major/minor):
-# result = update_pear_conf(base, 'php8.3.0', 'php8.4.21',
+# result = update_pear_conf(base, 'php8.3.0', 'php8.4.23',
 #     'no-debug-non-zts-20230831', 'no-debug-non-zts-20240924')
 
-with open('/Applications/MAMP/bin/php/php8.3.31/conf/pear.conf', 'w') as f:
+with open('/Applications/MAMP/bin/php/php8.3.32/conf/pear.conf', 'w') as f:
     f.write(result)
 ```
 
@@ -110,13 +110,13 @@ with open('/Applications/MAMP/bin/php/php8.3.0/conf/php.ini.temp') as f:
     base = f.read()
 
 # Same API hash:
-result = base.replace('php8.3.0', 'php8.3.31')
+result = base.replace('php8.3.0', 'php8.3.32')
 
 # Different API hash:
-# result = base.replace('php8.3.0', 'php8.4.21') \
+# result = base.replace('php8.3.0', 'php8.4.23') \
 #              .replace('no-debug-non-zts-20230831', 'no-debug-non-zts-20240924')
 
-with open('/Applications/MAMP/bin/php/php8.3.31/conf/php.ini.temp', 'w') as f:
+with open('/Applications/MAMP/bin/php/php8.3.32/conf/php.ini.temp', 'w') as f:
     f.write(result)
 ```
 
@@ -133,10 +133,10 @@ Last line of php.ini.temp must be:
 ## Distribution (2026-06-04)
 
 Files in `/Users/ogeorgi/Downloads/mamp-updated-php/`:
-- `php8.2.31-arm64.tar.gz` — full PHP install (untar into `/Applications/MAMP/bin/php/`)
-- `php8.3.31-arm64.tar.gz`
-- `php8.4.21-arm64.tar.gz`
-- `php8.5.6-arm64.tar.gz`
+- `php8.2.32-arm64.tar.gz` — full PHP install (untar into `/Applications/MAMP/bin/php/`)
+- `php8.3.32-arm64.tar.gz`
+- `php8.4.23-arm64.tar.gz`
+- `php8.5.8-arm64.tar.gz`
 - `build-php-mamp.sh` — configure script (synced from `/tmp/php-build/`)
 - `build-curl-mamp.sh` — libcurl rebuild script
 - `build-mamp-ext.sh` — extension build script (synced from `/tmp/php-build/`)
@@ -156,14 +156,14 @@ All 4 are POSIX IPC extensions (no external C deps, no OpenSSL needed):
 - `sysvmsg.so` — System V message queues
 - `shmop.so` — shared memory operations
 
-Built via phpize from PHP source trees (`/tmp/php-build/php-X.Y.Z/ext/<name>/`). Added `build_sysv_ext()` to `build-mamp-ext.sh`; run with `bash build-mamp-ext.sh sysv`. All 4 enabled in `php.ini` for 8.3.31, 8.4.21, 8.5.6.
+Built via phpize from PHP source trees (`/tmp/php-build/php-X.Y.Z/ext/<name>/`). Added `build_sysv_ext()` to `build-mamp-ext.sh`; run with `bash build-mamp-ext.sh sysv`. All 4 enabled in `php.ini` for 8.3.32, 8.4.23, 8.5.8.
 
-### Config files updated (all 3 versions: 8.3.31, 8.4.21, 8.5.6)
+### Config files updated (all 3 versions: 8.3.32, 8.4.23, 8.5.8)
 
 Three config layers per version, all kept in sync:
 1. `conf/php.ini` — standalone runtime (CLI / direct Apache)
 2. `conf/php.ini.temp` — MAMP PRO template (source for generated live conf)
-3. `/Library/Application Support/appsolute/MAMP PRO/conf/phpX.Y.Z.ini` — MAMP PRO live conf (not present for 8.5.6 until first MAMP PRO activation)
+3. `/Library/Application Support/appsolute/MAMP PRO/conf/phpX.Y.Z.ini` — MAMP PRO live conf (not present for 8.5.8 until first MAMP PRO activation)
 
 Extension policy, based on MAMP reference defaults (8.2.13, 8.3.0):
 - **Enabled (hardcoded)**: `pgsql.so`, `pdo_pgsql.so`
@@ -171,7 +171,7 @@ Extension policy, based on MAMP reference defaults (8.2.13, 8.3.0):
 - **Commented (available, opt-in)**: mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop
 - **Commented (unavailable)**: imap — no libc-client built; removed from PHP 8.4+
 
-php.ini.temp `MAMP_OPcache_MAMP` placeholder in 8.5.6 points to non-existent `opcache.so` (static in 8.5). After MAMP PRO first activates 8.5.6 and generates `php8.5.6.ini`, manually comment out that `zend_extension` line.
+php.ini.temp `MAMP_OPcache_MAMP` placeholder in 8.5.8 points to non-existent `opcache.so` (static in 8.5). After MAMP PRO first activates 8.5.8 and generates `php8.5.8.ini`, manually comment out that `zend_extension` line.
 
 ### Deliberately skipped
 - `apc.so` — dead; APCu replaces it
@@ -185,40 +185,40 @@ php.ini.temp `MAMP_OPcache_MAMP` placeholder in 8.5.6 points to non-existent `op
 
 ---
 
-## PHP 8.2.31 Build Notes (2026-06-04)
+## PHP 8.2.32 Build Notes (2026-06-04)
 
-PHP 8.2.31 built and installed to `/Applications/MAMP/bin/php/php8.2.31/`.
+PHP 8.2.32 built and installed to `/Applications/MAMP/bin/php/php8.2.32/`.
 
 ### PHP 8.2-specific vs 8.3
 
-1. **`-licuio` automatic** — unlike 8.3, no Makefile patch needed. PHP 8.2's configure picks up `-licuio` directly from `ICU_LIBS` env var into `EXTRA_LIBS`. Verify with `grep licuio /tmp/php-build/php-8.2.31/Makefile`.
+1. **`-licuio` automatic** — unlike 8.3, no Makefile patch needed. PHP 8.2's configure picks up `-licuio` directly from `ICU_LIBS` env var into `EXTRA_LIBS`. Verify with `grep licuio /tmp/php-build/php-8.2.32/Makefile`.
 
 2. **`--with-zlib-dir` and `--with-kerberos` still valid** — not removed until 8.4. `build-php-mamp.sh` handles this via `$ZLIB_DIR_FLAG` / `$KERBEROS_FLAG` conditionals (set for non-8.4/8.5/8.6).
 
 3. **`--with-xmlrpc` still in core** — xmlrpc was in PHP 8.2 core (removed in 8.3). Not used — we skip it (XMLRPC_FLAG stays empty in build script).
 
-4. **API hash: `no-debug-non-zts-20220829`** — same as all 8.2.x. pear.conf and php.ini.temp sourced from `php8.2.13/conf/` with version string `php8.2.13` → `php8.2.31` substitution only (no API hash change needed).
+4. **API hash: `no-debug-non-zts-20220829`** — same as all 8.2.x. pear.conf and php.ini.temp sourced from `php8.2.13/conf/` with version string `php8.2.13` → `php8.2.32` substitution only (no API hash change needed).
 
 5. **imap disabled** — 8.2.13 (MAMP reference) had `extension=imap.so` enabled; we comment it out since no libc-client is built.
 
-6. **Extension versions** — same as 8.3.31 (no version bumps needed; 8.5-specific versions not required).
+6. **Extension versions** — same as 8.3.32 (no version bumps needed; 8.5-specific versions not required).
 
 7. **No special shims** — `php_smart_string.h` and `php_rand.h` shims are only needed for 8.5 and 8.4 respectively. 8.2 builds cleanly with no patches.
 
-### Post-install for 8.2.31
+### Post-install for 8.2.32
 - `libphp.so`: copied from `/Applications/MAMP/Library/modules/libphp.so`
-- `php.ini`: from 8.2.13, `sed 's/php8.2.13/php8.2.31/g'`
+- `php.ini`: from 8.2.13, `sed 's/php8.2.13/php8.2.32/g'`
 - `pear.conf`: Python update_pear_conf script, base=8.2.13, no hash change
-- `php.ini.temp`: base=8.2.13, `.replace('php8.2.13', 'php8.2.31')`
+- `php.ini.temp`: base=8.2.13, `.replace('php8.2.13', 'php8.2.32')`
 
 ---
 
 ## PHP 8.5.x Build Notes (2026-06-04)
 
-PHP 8.5.6 built and installed to `/Applications/MAMP/bin/php/php8.5.6/`.
+PHP 8.5.8 built and installed to `/Applications/MAMP/bin/php/php8.5.8/`.
 
 > [!IMPORTANT]
-> **MAMP PRO GUI Compatibility Limit:** PHP 8.5.x is **not** supported by the MAMP PRO v6.x GUI/dropdown list. This is due to hardcoded/compiled-in version checks inside the MAMP PRO app binary that filter out version numbers `>= 8.5.0`. It cannot be spoofed using symlinks or binary patching due to internal app constraints, but it remains fully usable directly via the CLI (`/Applications/MAMP/bin/php/php8.5.6/bin/php`) or via manual Apache/CGI configurations.
+> **MAMP PRO GUI Compatibility Limit:** PHP 8.5.x is **not** supported by the MAMP PRO v6.x GUI/dropdown list. This is due to hardcoded/compiled-in version checks inside the MAMP PRO app binary that filter out version numbers `>= 8.5.0`. It cannot be spoofed using symlinks or binary patching due to internal app constraints, but it remains fully usable directly via the CLI (`/Applications/MAMP/bin/php/php8.5.8/bin/php`) or via manual Apache/CGI configurations.
 
 ### PHP 8.5-specific changes vs 8.4
 
@@ -260,13 +260,13 @@ Use `bash /tmp/php-build/build-mamp-ext.sh ext85` to build all extensions for PH
 Script: `/tmp/php-build/build-mamp-ext.sh`
 C deps installed to: `/tmp/php-build/ext-deps/`
 Extension dirs:
-- PHP 8.3.31: `/Applications/MAMP/bin/php/php8.3.31/lib/php/extensions/no-debug-non-zts-20230831/`
-- PHP 8.4.21: `/Applications/MAMP/bin/php/php8.4.21/lib/php/extensions/no-debug-non-zts-20240924/`
-- PHP 8.5.6: `/Applications/MAMP/bin/php/php8.5.6/lib/php/extensions/no-debug-non-zts-20250925/`
+- PHP 8.3.32: `/Applications/MAMP/bin/php/php8.3.32/lib/php/extensions/no-debug-non-zts-20230831/`
+- PHP 8.4.23: `/Applications/MAMP/bin/php/php8.4.23/lib/php/extensions/no-debug-non-zts-20240924/`
+- PHP 8.5.8: `/Applications/MAMP/bin/php/php8.5.8/lib/php/extensions/no-debug-non-zts-20250925/`
 
 ### Extensions built successfully (as of session end)
 
-| Extension | 8.3.31 | 8.4.21 | 8.5.6  | Notes |
+| Extension | 8.3.32 | 8.4.23 | 8.5.8  | Notes |
 |-----------|--------|--------|--------|-------|
 | apcu      | ✓      | ✓      | ✓      | |
 | igbinary  | ✓      | ✓      | ✓      | needs smart_string shim |
@@ -304,7 +304,7 @@ Extension dirs:
 
 5. **libmcrypt C89 code** — old K&R style declarations; fixed with `CFLAGS="-std=gnu89 -Wno-implicit-function-declaration -Wno-implicit-int"`
 
-6. **libpq MACOSX_DEPLOYMENT_TARGET=12.0** — `strchrnul` requires macOS 15.4+; fixed by unsetting deployment target for PG build
+6. **libpq MACOSX_DEPLOYMENT_TARGET=12.0** — `strchrnul` requires macOS 15.4+; fixed by building with `CFLAGS="-arch $ARCH -Wno-unguarded-availability-new"` to allow compilation while targeting 12.0.
 
 7. **libpq dylib atexit check** — OpenSSL calls atexit, PG rejects this in dylib; fixed by building only `libpq.a` and doing manual install
 
@@ -317,6 +317,8 @@ Extension dirs:
 11. **imagick segfault on phpinfo() / php --info** — ImageMagick detected optional dynamic delegates from the host system (like Graphviz/`gvc` or `libraw`) which are not packed into MAMP. The linker resolved them using dynamic lookup, resulting in symbol references to `NULL` (like `libraw_version` in `RegisterDNGImage` or `gvContext` in `RegisterDOTImage`) which segfaulted when printing module info. Fixed by passing explicit `--without-` flags for all optional delegates (`--without-gvc`, `--without-raw`, `--without-fontconfig`, `--without-pango`, etc.) during ImageMagick configuration, producing a minimal static library.
 
 12. **Build folder permissions** — Multi-user shared machines caused permission conflicts inside `/tmp/php-build/` (e.g. running scripts under different accounts). Fixed by updating the scripts to use `/tmp/php-build-${USER}` dynamically.
+
+13. **pgsql / pdo_pgsql connection segfault** — Mismatched macOS deployment target headers/libraries or missing static helpers (`pg_strcasecmp` in `libpgport.a`, or OpenSSL functions) resulted in NULL pointers at runtime due to `-undefined dynamic_lookup`. Fixed by building `libpq` completely targeting macOS 12.0, and patching the extension Makefile to link against `-lpgcommon -lpgport -lssl -lcrypto -lz`.
 
 ### C libraries built (in /tmp/php-build/ext-deps/)
 - libyaml 0.2.5 ✓
@@ -339,4 +341,4 @@ bash build-mamp-ext.sh mcrypt
 bash build-mamp-ext.sh memcached
 bash build-mamp-ext.sh pgsql
 ```
-Then check: `ls /Applications/MAMP/bin/php/php8.3.31/lib/php/extensions/no-debug-non-zts-20230831/`
+Then check: `ls /Applications/MAMP/bin/php/php8.3.32/lib/php/extensions/no-debug-non-zts-20230831/`

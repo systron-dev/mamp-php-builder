@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build missing PHP extensions for MAMP PHP 8.2.31, 8.3.31, 8.4.21, 8.5.6
+# Build missing PHP extensions for MAMP PHP 8.2.32, 8.3.32, 8.4.23, 8.5.8
 # All deps built from source — no Homebrew dependencies
 # Usage: ./build-mamp-ext.sh [target]
 # Targets: all | deps | ext | <specific> (see case block at bottom)
@@ -9,10 +9,10 @@ set -euo pipefail
 # ── Paths ─────────────────────────────────────────────────────────────────────
 MAMP=/Applications/MAMP
 MAMPLIB=$MAMP/Library
-PHP82=$MAMP/bin/php/php8.2.31
-PHP83=$MAMP/bin/php/php8.3.31
-PHP84=$MAMP/bin/php/php8.4.21
-PHP85=$MAMP/bin/php/php8.5.6
+PHP82=$MAMP/bin/php/php8.2.32
+PHP83=$MAMP/bin/php/php8.3.32
+PHP84=$MAMP/bin/php/php8.4.23
+PHP85=$MAMP/bin/php/php8.5.8
 EXT82=$PHP82/lib/php/extensions/no-debug-non-zts-20220829
 EXT83=$PHP83/lib/php/extensions/no-debug-non-zts-20230831
 EXT84=$PHP84/lib/php/extensions/no-debug-non-zts-20240924
@@ -77,7 +77,7 @@ fi
 export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$MAMPLIB/lib/pkgconfig"
 export PATH="$DEPS/bin:$PHP85/bin:$PHP84/bin:$PHP83/bin:$PHP82/bin:$PATH"
 # Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
-if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
+if [ -z "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
   if [ -t 0 ]; then
     read -p "Enter target macOS version for the build (e.g. 12.0, 13.0, 14.0, 15.0) [default: 12.0]: " TARGET_VAL
     export MACOSX_DEPLOYMENT_TARGET="${TARGET_VAL:-12.0}"
@@ -154,6 +154,9 @@ _build_ext_one() {
   # pcre2.h lives in MAMP Library — not searched by default phpize builds
   CPPFLAGS="${CPPFLAGS:+$CPPFLAGS }-I$MAMPLIB/include" \
     ./configure --with-php-config="$phpdir/bin/php-config" $configure_args || return 1
+  if [ -f Makefile ]; then
+    sed -i.bak -E 's/^([A-Z_]+_SHARED_LIBADD = .* -lpq)/\1 -lpgcommon -lpgport -lssl -lcrypto -lz/g' Makefile || true
+  fi
   make -j$NCPU || return 1
   if [ "$(uname)" = "Darwin" ]; then
     log "    → Code-signing modules/*.so"
@@ -262,16 +265,15 @@ build_libpq() {
   fetch_tar "https://ftp.postgresql.org/pub/source/v$PG_VER/postgresql-$PG_VER.tar.gz" "$DIR"
   cd "$SRC/$DIR"
   hide_mamp_ssl
-  # Build just enough for libpq — no server, no readline
+  # Build just enough for libpq — no server, no readline, no ICU/zlib to keep it clean
   ./configure --prefix="$DEPS" \
     --without-readline \
     --with-ssl=openssl \
+    --without-icu \
+    --without-zlib \
     CPPFLAGS="-I$MAMPLIB/include" \
-    LDFLAGS="-L$MAMPLIB/lib"
-  # Unset deployment target — PG 16 uses strchrnul which requires macOS 15.4+
-  # The running system is macOS 15+ so this is safe
-  local saved_target="${MACOSX_DEPLOYMENT_TARGET:-}"
-  export MACOSX_DEPLOYMENT_TARGET=15.4
+    LDFLAGS="-L$MAMPLIB/lib" \
+    CFLAGS="-arch $ARCH -Wno-unguarded-availability-new"
   # Build only static libpq.a — skip dylib (dylib check fails: OpenSSL calls atexit)
   make -j$NCPU -C src/interfaces/libpq libpq.a
   # Manual install — avoid 'make install' which triggers dylib build+check
@@ -286,7 +288,6 @@ build_libpq() {
   cp src/bin/pg_config/pg_config "$DEPS/bin/"
   chmod +x "$DEPS/bin/pg_config"
   make -C src/include install
-  [ -n "$saved_target" ] && export MACOSX_DEPLOYMENT_TARGET="$saved_target" || true
   restore_mamp_ssl
 }
 
@@ -516,7 +517,7 @@ build_yaz_ext() {
 
 build_sysv_ext() {
   log "── sysvsem + sysvshm + sysvmsg + shmop (from PHP source) ──"
-  for PHP_VER in 8.2.31 8.3.31 8.4.21 8.5.6; do
+  for PHP_VER in 8.2.32 8.3.32 8.4.23 8.5.8; do
     local php_src="$SRC/php-$PHP_VER"
     local php_src_alt="$BUILD/php-$PHP_VER"
     if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
@@ -532,17 +533,17 @@ build_sysv_ext() {
 
   for ext in sysvsem sysvshm sysvmsg shmop; do
     log "  ── $ext ──"
-    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.31/ext/$ext" ""
-    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.31/ext/$ext" ""
-    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.21/ext/$ext" ""
-    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.6/ext/$ext"  ""
+    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.32/ext/$ext" ""
+    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.32/ext/$ext" ""
+    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.23/ext/$ext" ""
+    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.8/ext/$ext"  ""
   done
 }
 
 build_pgsql_ext() {
   log "── pgsql + pdo_pgsql (from PHP source) ──"
   # These are bundled extensions — need PHP source tree
-  for PHP_VER in 8.2.31 8.3.31 8.4.21 8.5.6; do
+  for PHP_VER in 8.2.32 8.3.32 8.4.23 8.5.8; do
     local php_src="$SRC/php-$PHP_VER"
     # PHP build trees in /tmp/php-build are also valid sources
     local php_src_alt="$BUILD/php-$PHP_VER"
@@ -562,14 +563,14 @@ build_pgsql_ext() {
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
 
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.31/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.31/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.21/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.6/ext/pgsql"      "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.31/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.31/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.21/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.6/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.32/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.32/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.23/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.8/ext/pgsql"      "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.32/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.32/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.23/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.8/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
 
   unset LDFLAGS LIBS
   restore_mamp_ssl
@@ -635,13 +636,13 @@ build_mcrypt_ext_85() {
 
 build_pgsql_ext_85() {
   log "── pgsql + pdo_pgsql (PHP 8.5 only) ──"
-  local php_src="$SRC/php-8.5.6"
-  local php_src_alt="$BUILD/php-8.5.6"
+  local php_src="$SRC/php-8.5.8"
+  local php_src_alt="$BUILD/php-8.5.8"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
     ln -sf "$php_src_alt" "$php_src"
   elif [ ! -d "$php_src" ]; then
-    log "  fetch PHP 8.5.6 source..."
-    curl -fsSL "https://www.php.net/distributions/php-8.5.6.tar.gz" | tar xz -C "$SRC"
+    log "  fetch PHP 8.5.8 source..."
+    curl -fsSL "https://www.php.net/distributions/php-8.5.8.tar.gz" | tar xz -C "$SRC"
   fi
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"

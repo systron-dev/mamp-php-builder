@@ -12,10 +12,10 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | `build-php-mamp.sh` | Configure PHP from source (run before `make`) |
 | `build-curl-mamp.sh` | Rebuild libcurl against OpenSSL 3 |
 | `build-mamp-ext.sh` | Build all C deps + PECL extensions |
-| `php8.2.31-arm64.tar.gz` | Pre-built PHP 8.2.31 for Apple Silicon |
-| `php8.3.31-arm64.tar.gz` | Pre-built PHP 8.3.31 for Apple Silicon |
-| `php8.4.21-arm64.tar.gz` | Pre-built PHP 8.4.21 for Apple Silicon |
-| `php8.5.6-arm64.tar.gz` | Pre-built PHP 8.5.6 for Apple Silicon |
+| `php8.2.32-arm64.tar.gz` | Pre-built PHP 8.2.32 for Apple Silicon |
+| `php8.3.32-arm64.tar.gz` | Pre-built PHP 8.3.32 for Apple Silicon |
+| `php8.4.23-arm64.tar.gz` | Pre-built PHP 8.4.23 for Apple Silicon |
+| `php8.5.8-arm64.tar.gz` | Pre-built PHP 8.5.8 for Apple Silicon |
 
 ### Pre-built archive naming
 
@@ -39,10 +39,10 @@ bash build-curl-mamp.sh
 # 3. Download PHP source, then configure + make
 BUILD="/tmp/php-build-${USER:-mamp}"
 mkdir -p "$BUILD"
-curl -LO https://www.php.net/distributions/php-8.3.31.tar.gz
-tar xzf php-8.3.31.tar.gz -C "$BUILD"
-bash build-php-mamp.sh 8.3.31
-cd "$BUILD/php-8.3.31" && make -j$(sysctl -n hw.ncpu) && make install
+curl -LO https://www.php.net/distributions/php-8.3.32.tar.gz
+tar xzf php-8.3.32.tar.gz -C "$BUILD"
+bash build-php-mamp.sh 8.3.32
+cd "$BUILD/php-8.3.32" && make -j$(sysctl -n hw.ncpu) && make install
 
 # 4. Build extensions (these are automatically signed ad-hoc on macOS)
 bash build-mamp-ext.sh all
@@ -67,10 +67,10 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 
 | PHP | Extensions | macOS |
 |-----|-----------|-------|
-| 8.2.31 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 (arm64 & x86_64) |
-| 8.3.31 | same as above | Sequoia 15 (arm64 & x86_64) |
-| 8.4.21 | same as above | Sequoia 15 (arm64 & x86_64) |
-| 8.5.6  | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 (arm64 & x86_64) |
+| 8.2.32 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 (arm64 & x86_64) |
+| 8.3.32 | same as above | Sequoia 15 (arm64 & x86_64) |
+| 8.4.23 | same as above | Sequoia 15 (arm64 & x86_64) |
+| 8.5.8  | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 (arm64 & x86_64) |
 
 Extensions marked as "disabled by default": mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop — present as `.so` files, commented out in `php.ini` / `php.ini.temp`. Enable manually when needed.
 
