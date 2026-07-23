@@ -116,6 +116,17 @@ if [ -L "$LIBCRYPTO_SYM" ]; then
   echo "==> Hid libcrypto.dylib symlink for static linking"
 fi
 
+mkdir -p "$BUILD"
+if [ ! -d "$SRC" ]; then
+  if [ -f "$START_DIR/php-${VERSION}.tar.gz" ]; then
+    echo "==> Extracting php-${VERSION}.tar.gz..."
+    tar xzf "$START_DIR/php-${VERSION}.tar.gz" -C "$BUILD"
+  else
+    echo "==> Downloading and extracting PHP ${VERSION} source..."
+    curl -fsSL "https://www.php.net/distributions/php-${VERSION}.tar.gz" | tar xz -C "$BUILD"
+  fi
+fi
+
 cd "$SRC"
 
 ./configure \
@@ -163,7 +174,7 @@ cd "$SRC"
   --with-ldap=$MAMP \
   --with-ldap-sasl=$MAMP \
   CFLAGS="-arch $ARCH" \
-  CXXFLAGS="-arch $ARCH" \
+  CXXFLAGS="-arch $ARCH -isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" \
   LDFLAGS="-arch $ARCH -L$MAMP/lib" \
   KERBEROS_CFLAGS="-I/usr/include" \
   KERBEROS_LIBS="-lkrb5" \
