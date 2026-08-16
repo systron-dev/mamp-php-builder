@@ -9,10 +9,10 @@ set -euo pipefail
 # ── Paths ─────────────────────────────────────────────────────────────────────
 MAMP=/Applications/MAMP
 MAMPLIB=$MAMP/Library
-PHP82=$MAMP/bin/php/php8.2.32
-PHP83=$MAMP/bin/php/php8.3.32
-PHP84=$MAMP/bin/php/php8.4.23
-PHP85=$MAMP/bin/php/php8.5.8
+PHP82=$MAMP/bin/php/php8.2.33
+PHP83=$MAMP/bin/php/php8.3.33
+PHP84=$MAMP/bin/php/php8.4.24
+PHP85=$MAMP/bin/php/php8.5.9
 EXT82=$PHP82/lib/php/extensions/no-debug-non-zts-20220829
 EXT83=$PHP83/lib/php/extensions/no-debug-non-zts-20230831
 EXT84=$PHP84/lib/php/extensions/no-debug-non-zts-20240924
@@ -517,7 +517,7 @@ build_yaz_ext() {
 
 build_sysv_ext() {
   log "── sysvsem + sysvshm + sysvmsg + shmop (from PHP source) ──"
-  for PHP_VER in 8.2.32 8.3.32 8.4.23 8.5.8; do
+  for PHP_VER in 8.2.33 8.3.33 8.4.24 8.5.9; do
     local php_src="$SRC/php-$PHP_VER"
     local php_src_alt="$BUILD/php-$PHP_VER"
     if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
@@ -533,17 +533,17 @@ build_sysv_ext() {
 
   for ext in sysvsem sysvshm sysvmsg shmop; do
     log "  ── $ext ──"
-    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.32/ext/$ext" ""
-    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.32/ext/$ext" ""
-    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.23/ext/$ext" ""
-    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.8/ext/$ext"  ""
+    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.33/ext/$ext" ""
+    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.33/ext/$ext" ""
+    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.24/ext/$ext" ""
+    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.9/ext/$ext"  ""
   done
 }
 
 build_pgsql_ext() {
   log "── pgsql + pdo_pgsql (from PHP source) ──"
   # These are bundled extensions — need PHP source tree
-  for PHP_VER in 8.2.32 8.3.32 8.4.23 8.5.8; do
+  for PHP_VER in 8.2.33 8.3.33 8.4.24 8.5.9; do
     local php_src="$SRC/php-$PHP_VER"
     # PHP build trees in /tmp/php-build are also valid sources
     local php_src_alt="$BUILD/php-$PHP_VER"
@@ -563,14 +563,14 @@ build_pgsql_ext() {
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
 
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.32/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.32/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.23/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.8/ext/pgsql"      "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.32/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.32/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.23/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.8/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.33/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.33/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.24/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.9/ext/pgsql"      "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.33/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.33/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.24/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.9/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
 
   unset LDFLAGS LIBS
   restore_mamp_ssl

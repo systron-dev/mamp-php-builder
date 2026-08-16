@@ -10,6 +10,10 @@ versions = {
     "8.3.32": "no-debug-non-zts-20230831",
     "8.4.23": "no-debug-non-zts-20240924",
     "8.5.8":  "no-debug-non-zts-20250925",
+    "8.2.33": "no-debug-non-zts-20220829",
+    "8.3.33": "no-debug-non-zts-20230831",
+    "8.4.24": "no-debug-non-zts-20240924",
+    "8.5.9":  "no-debug-non-zts-20250925",
 }
 
 base_dir = "/Applications/MAMP/bin/php/php8.2.0/conf"
@@ -88,7 +92,7 @@ extension=pdo_pgsql.so
 ;extension=shmop.so"""
 
     # For PHP 8.5.x opcache is static, so we comment out its loading in php.ini
-    if version in ("8.5.6", "8.5.8"):
+    if version in ("8.5.6", "8.5.8", "8.5.9"):
         new_php_ini = new_php_ini.replace(
             f'zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/opcache.so"',
             f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/opcache.so"'
@@ -99,7 +103,7 @@ extension=pdo_pgsql.so
     else:
         print(f"Warning: Old extension block not found in php.ini for {version}!")
         
-    if version in ("8.4.21", "8.5.6", "8.4.23", "8.5.8"):
+    if version in ("8.4.21", "8.5.6", "8.4.23", "8.5.8", "8.4.24", "8.5.9"):
         new_php_ini = new_php_ini.replace("session.sid_length = 26", ";session.sid_length = 26")
         new_php_ini = new_php_ini.replace("session.sid_bits_per_character = 5", ";session.sid_bits_per_character = 5")
 
@@ -145,7 +149,7 @@ extension=pdo_pgsql.so
 ;extension=sysvmsg.so
 ;extension=shmop.so"""
 
-    if version in ("8.5.6", "8.5.8"):
+    if version in ("8.5.6", "8.5.8", "8.5.9"):
         new_php_ini_temp = new_php_ini_temp.replace(
             f'MAMP_OPcache_MAMPzend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/opcache.so"',
             f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/opcache.so"'
@@ -156,7 +160,7 @@ extension=pdo_pgsql.so
     else:
         print(f"Warning: Old extension block not found in php.ini.temp for {version}!")
 
-    if version in ("8.4.21", "8.5.6", "8.4.23", "8.5.8"):
+    if version in ("8.4.21", "8.5.6", "8.4.23", "8.5.8", "8.4.24", "8.5.9"):
         new_php_ini_temp = new_php_ini_temp.replace("session.sid_length = 26", ";session.sid_length = 26")
         new_php_ini_temp = new_php_ini_temp.replace("session.sid_bits_per_character = 5", ";session.sid_bits_per_character = 5")
 

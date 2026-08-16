@@ -4,7 +4,7 @@ set -e
 MAMP="/Applications/MAMP/Library"
 BUILD="/tmp/php-build-${USER:-mamp}"
 START_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSIONS=("8.2.32" "8.3.32" "8.4.23" "8.5.8")
+VERSIONS=("8.2.33" "8.3.33" "8.4.24" "8.5.9")
 
 # Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
 if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
@@ -25,9 +25,9 @@ for version in "${VERSIONS[@]}"; do
   bash build-php-mamp.sh "$version"
 
   # Apply ICU make patch for PHP 8.3
-  if [ "$version" = "8.3.32" ]; then
-    echo "==> Applying ICU Makefile patch for PHP 8.3.32"
-    python3 -c "import re; f='${BUILD}/php-8.3.32/Makefile'; c=open(f).read(); open(f,'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))"
+  if [ "$version" = "8.3.33" ]; then
+    echo "==> Applying ICU Makefile patch for PHP 8.3.33"
+    python3 -c "import re; f='${BUILD}/php-8.3.33/Makefile'; c=open(f).read(); open(f,'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))"
   fi
 
   echo "==> Hiding OpenSSL dylibs for static compilation"
