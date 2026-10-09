@@ -64,8 +64,8 @@ export ZLIB_LIBS="-L$MAMP/lib -lz"
 export CURL_CFLAGS="-I$MAMP/include"
 export CURL_LIBS="-L$MAMP/lib -lcurl -lnghttp2 -lldap -lz"
 export WEBP_CFLAGS="-I$MAMP/include"
-export WEBP_LIBS="-L$MAMP/lib -lwebp"
-export FREETYPE2_CFLAGS="-I$MAMP/include/freetype2"
+export WEBP_LIBS="-L$MAMP/lib -lwebp -lwebpdemux -lwebpmux"
+export FREETYPE2_CFLAGS="-I$MAMP/include/freetype2 -DHAVE_FT2BUILD_H"
 export FREETYPE2_LIBS="-L$MAMP/lib -lfreetype"
 export PNG_CFLAGS="-I$MAMP/include"
 export PNG_LIBS="-L$MAMP/lib -lpng16"
@@ -123,7 +123,37 @@ if [ ! -d "$SRC" ]; then
     tar xzf "$START_DIR/php-${VERSION}.tar.gz" -C "$BUILD"
   else
     echo "==> Downloading and extracting PHP ${VERSION} source..."
-    curl -fsSL "https://www.php.net/distributions/php-${VERSION}.tar.gz" | tar xz -C "$BUILD"
+    if curl -fsSL "https://www.php.net/distributions/php-${VERSION}.tar.gz" -o "$BUILD/php-${VERSION}.tar.gz" 2>/dev/null; then
+      tar xzf "$BUILD/php-${VERSION}.tar.gz" -C "$BUILD"
+      rm -f "$BUILD/php-${VERSION}.tar.gz"
+    else
+      # Fallback 1: Check QA / RC candidate API or known QA URLs
+      QA_URL=$(curl -sL "https://www.php.net/release-candidates.php?format=json" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    for k, v in d.get('releases', {}).items():
+        if v.get('version') == '$VERSION':
+            print(v.get('files', {}).get('gz', {}).get('path', ''))
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null || true)
+      if [ -n "$QA_URL" ] && curl -fsSL "$QA_URL" -o "$BUILD/php-${VERSION}.tar.gz" 2>/dev/null; then
+        echo "==> Downloaded from PHP QA / Release Candidates: $QA_URL"
+        tar xzf "$BUILD/php-${VERSION}.tar.gz" -C "$BUILD"
+        rm -f "$BUILD/php-${VERSION}.tar.gz"
+      else
+        # Fallback 2: GitHub php-src release tag
+        echo "==> Falling back to GitHub php-src for php-${VERSION}..."
+        curl -fsSL "https://github.com/php/php-src/archive/refs/tags/php-${VERSION}.tar.gz" -o "$BUILD/php-${VERSION}.tar.gz"
+        tar xzf "$BUILD/php-${VERSION}.tar.gz" -C "$BUILD"
+        rm -f "$BUILD/php-${VERSION}.tar.gz"
+        if [ -d "$BUILD/php-src-php-${VERSION}" ]; then
+          mv "$BUILD/php-src-php-${VERSION}" "$SRC"
+        fi
+      fi
+    fi
   fi
 fi
 
@@ -184,5 +214,13 @@ cd "$SRC"
   JPEG_LIBS="-ljpeg" \
   SASL_CFLAGS="-I/usr/include/sasl" \
   SASL_LIBS="-lsasl2"
+
+# PHP 8.6 bundled libgd requires HAVE_FT2BUILD_H in php_config.h
+if [[ "$MAJOR_MINOR" == "8.6" ]] && [ -f "$SRC/main/php_config.h" ]; then
+  if ! grep -q "HAVE_FT2BUILD_H" "$SRC/main/php_config.h"; then
+    echo "==> Appending HAVE_FT2BUILD_H to main/php_config.h for PHP 8.6 libgd"
+    echo '#define HAVE_FT2BUILD_H 1' >> "$SRC/main/php_config.h"
+  fi
+fi
 
 echo "Configure done for PHP $VERSION"

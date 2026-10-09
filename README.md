@@ -1,6 +1,6 @@
 # MAMP 6.9 — Custom PHP Build Scripts
 
-Build scripts and documentation for compiling PHP 8.2.x / 8.3.x / 8.4.x / 8.5.x from source and installing into MAMP 6.9 on macOS (Apple Silicon and Intel).
+Build scripts and documentation for compiling PHP 8.2.x / 8.3.x / 8.4.x / 8.5.x / 8.6.x from source and installing into MAMP 6.9 on macOS (Apple Silicon and Intel).
 
 MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 
@@ -12,10 +12,11 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | `build-php-mamp.sh` | Configure PHP from source (run before `make`) |
 | `build-curl-mamp.sh` | Rebuild libcurl against OpenSSL 3 |
 | `build-mamp-ext.sh` | Build all C deps + PECL extensions |
-| `php8.2.33-arm64.tar.gz` | Pre-built PHP 8.2.33 for Apple Silicon |
-| `php8.3.33-arm64.tar.gz` | Pre-built PHP 8.3.33 for Apple Silicon |
-| `php8.4.24-arm64.tar.gz` | Pre-built PHP 8.4.24 for Apple Silicon |
-| `php8.5.9-arm64.tar.gz` | Pre-built PHP 8.5.9 for Apple Silicon |
+| `php8.2.34-arm64.tar.gz` | Pre-built PHP 8.2.34 for Apple Silicon |
+| `php8.3.35-arm64.tar.gz` | Pre-built PHP 8.3.35 for Apple Silicon |
+| `php8.4.26-arm64.tar.gz` | Pre-built PHP 8.4.26 for Apple Silicon |
+| `php8.5.11-arm64.tar.gz` | Pre-built PHP 8.5.11 for Apple Silicon |
+| `php8.6.0RC3-arm64.tar.gz` | Pre-built PHP 8.6.0RC3 for Apple Silicon |
 
 ### Pre-built archive naming
 
@@ -39,10 +40,10 @@ bash build-curl-mamp.sh
 # 3. Download PHP source, then configure + make
 BUILD="/tmp/php-build-${USER:-mamp}"
 mkdir -p "$BUILD"
-curl -LO https://www.php.net/distributions/php-8.3.33.tar.gz
-tar xzf php-8.3.33.tar.gz -C "$BUILD"
-bash build-php-mamp.sh 8.3.33
-cd "$BUILD/php-8.3.33" && make -j$(sysctl -n hw.ncpu) && make install
+curl -LO https://www.php.net/distributions/php-8.3.35.tar.gz
+tar xzf php-8.3.35.tar.gz -C "$BUILD"
+bash build-php-mamp.sh 8.3.35
+cd "$BUILD/php-8.3.35" && make -j$(sysctl -n hw.ncpu) && make install
 
 # 4. Build extensions (these are automatically signed ad-hoc on macOS)
 bash build-mamp-ext.sh all
@@ -67,10 +68,11 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 
 | PHP | Extensions | macOS |
 |-----|-----------|-------|
-| 8.2.33 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 (arm64 & x86_64) |
-| 8.3.33 | same as above | Sequoia 15 (arm64 & x86_64) |
-| 8.4.24 | same as above | Sequoia 15 (arm64 & x86_64) |
-| 8.5.9  | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 (arm64 & x86_64) |
+| 8.2.34 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 (arm64 & x86_64) |
+| 8.3.35 | same as above | Sequoia 15 (arm64 & x86_64) |
+| 8.4.26 | same as above | Sequoia 15 (arm64 & x86_64) |
+| 8.5.11 | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 (arm64 & x86_64) |
+| 8.6.0RC3 | supported via `build-php-mamp.sh 8.6.0RC3` & `build-mamp-ext.sh ext86` | Sequoia 15 (arm64 & x86_64) |
 
 Extensions marked as "disabled by default": mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop — present as `.so` files, commented out in `php.ini` / `php.ini.temp`. Enable manually when needed.
 

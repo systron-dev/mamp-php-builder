@@ -2,7 +2,7 @@
 
 MAMP PRO v6.9 no longer ships newer PHP packages — updates are v7.x-only. This guide covers building PHP from source and installing it into MAMP's directory structure on both Apple Silicon (arm64) and Intel (x86_64).
 
-**Tested with:** PHP 8.2.32, PHP 8.3.32, PHP 8.4.23, PHP 8.5.8 on MAMP v6.9, macOS Sequoia (arm64 and x86_64)  
+**Tested with:** PHP 8.2.34, PHP 8.3.35, PHP 8.4.26, PHP 8.5.11, PHP 8.6.0RC3 on MAMP v6.9, macOS Sequoia (arm64 and x86_64)  
 
 ### Environment variables
 
@@ -43,16 +43,18 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 ```
 /Applications/MAMP/Library/          MAMP's own lib/include/bin (MAMPLIB)
 /Applications/MAMP/bin/php/          PHP installations
-  php8.2.32/
+  php8.2.34/
     bin/php, phpize, php-config
     conf/php.ini, pear.conf, php.ini.temp
     lib/php/extensions/no-debug-non-zts-20220829/
-  php8.3.32/
+  php8.3.35/
     ...extensions/no-debug-non-zts-20230831/
-  php8.4.23/
+  php8.4.26/
     ...extensions/no-debug-non-zts-20240924/
-  php8.5.8/
+  php8.5.11/
     ...extensions/no-debug-non-zts-20250925/
+  php8.6.0RC3/
+    ...extensions/no-debug-non-zts-20260924/
 /tmp/php-build-${USER:-mamp}/         build workspace ($BUILD)
   build-php-mamp.sh                  PHP configure script
   build-curl-mamp.sh                 libcurl rebuild script
@@ -95,14 +97,14 @@ ls /opt/local/share/libtool/build-aux/config.sub
 ```bash
 mkdir -p "$BUILD"
 cd "$BUILD"
-curl -LO https://www.php.net/distributions/php-8.2.32.tar.gz
-curl -LO https://www.php.net/distributions/php-8.3.32.tar.gz
-curl -LO https://www.php.net/distributions/php-8.4.23.tar.gz
-curl -LO https://www.php.net/distributions/php-8.5.8.tar.gz
-tar xzf php-8.2.32.tar.gz
-tar xzf php-8.3.32.tar.gz
-tar xzf php-8.4.23.tar.gz
-tar xzf php-8.5.8.tar.gz
+curl -LO https://www.php.net/distributions/php-8.2.34.tar.gz
+curl -LO https://www.php.net/distributions/php-8.3.35.tar.gz
+curl -LO https://www.php.net/distributions/php-8.4.26.tar.gz
+curl -LO https://www.php.net/distributions/php-8.5.11.tar.gz
+tar xzf php-8.2.34.tar.gz
+tar xzf php-8.3.35.tar.gz
+tar xzf php-8.4.26.tar.gz
+tar xzf php-8.5.11.tar.gz
 ```
 
 ---
@@ -159,13 +161,15 @@ bash "$BUILD/build-curl-mamp.sh" 8.7.1
 ### Run configure
 
 ```bash
-bash "$BUILD/build-php-mamp.sh" 8.2.32
+bash "$BUILD/build-php-mamp.sh" 8.2.34
 # or
-bash "$BUILD/build-php-mamp.sh" 8.3.32
+bash "$BUILD/build-php-mamp.sh" 8.3.35
 # or
-bash "$BUILD/build-php-mamp.sh" 8.4.23
+bash "$BUILD/build-php-mamp.sh" 8.4.26
 # or
-bash "$BUILD/build-php-mamp.sh" 8.5.8
+bash "$BUILD/build-php-mamp.sh" 8.5.11
+# or (for RC / pre-releases)
+bash "$BUILD/build-php-mamp.sh" 8.6.0RC3
 ```
 
 The script runs `./configure` only — it does **not** run `make`.
@@ -184,7 +188,7 @@ MAMP has ICU 56 with versioned symbols (`u_sprintf_56` in `libicuio`). PHP 8.3 n
 # PHP 8.3 only:
 python3 -c "
 import re
-f = '${BUILD}/php-8.3.32/Makefile'
+f = '${BUILD}/php-8.3.35/Makefile'
 c = open(f).read()
 open(f, 'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))
 "
@@ -193,7 +197,7 @@ open(f, 'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MUL
 ### Run make
 
 ```bash
-cd "$BUILD/php-8.3.32"    # or php-8.4.23
+cd "$BUILD/php-8.3.35"    # or php-8.4.26
 
 MAMP=/Applications/MAMP/Library
 mv $MAMP/lib/libssl.dylib $MAMP/lib/libssl.dylib.hidden
@@ -217,12 +221,12 @@ MAMP GUI requires the Apache PHP module (`libphp.so`) to be located inside each 
 
 ```bash
 # 1. Create the modules folder inside the PHP directory and copy it
-mkdir -p /Applications/MAMP/bin/php/php8.3.32/modules
-cp "$BUILD/php-8.3.32/libs/libphp.so" /Applications/MAMP/bin/php/php8.3.32/modules/libphp.so
-codesign --force --sign - /Applications/MAMP/bin/php/php8.3.32/modules/libphp.so
+mkdir -p /Applications/MAMP/bin/php/php8.3.35/modules
+cp "$BUILD/php-8.3.35/libs/libphp.so" /Applications/MAMP/bin/php/php8.3.35/modules/libphp.so
+codesign --force --sign - /Applications/MAMP/bin/php/php8.3.35/modules/libphp.so
 
 # 2. Also copy to MAMP's global Apache modules directory as a fallback
-cp "$BUILD/php-8.3.32/libs/libphp.so" /Applications/MAMP/Library/modules/libphp.so
+cp "$BUILD/php-8.3.35/libs/libphp.so" /Applications/MAMP/Library/modules/libphp.so
 codesign --force --sign - /Applications/MAMP/Library/modules/libphp.so
 ```
 
@@ -242,6 +246,7 @@ Or build phases separately:
 bash "$BUILD/build-mamp-ext.sh" deps    # C libraries only
 bash "$BUILD/build-mamp-ext.sh" ext     # PECL extensions for 8.2 + 8.3 + 8.4
 bash "$BUILD/build-mamp-ext.sh" ext85   # PECL extensions for 8.5 only
+bash "$BUILD/build-mamp-ext.sh" ext86   # PECL extensions for 8.6 only
 ```
 
 > **PHP 8.5 note:** Run `ext85` separately after placing compat shims (see [PHP 8.5 gotchas](#php-85-gotchas) below).
@@ -274,7 +279,7 @@ bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 
 ### PHP extensions built
 
-| Extension      | 8.2.32 | 8.3.32 | 8.4.23 | 8.5.8   | Notes                                              |
+| Extension      | 8.2.34 | 8.3.35 | 8.4.26 | 8.5.11  | Notes                                              |
 |----------------|--------|--------|--------|---------|----------------------------------------------------|
 | apcu           | ✓      | ✓      | ✓      | ✓       |                                                    |
 | igbinary       | ✓      | ✓      | ✓      | ✓       | Header installed to PHP include dirs               |
@@ -288,7 +293,7 @@ bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 | uploadprogress | ✓      | ✓      | ✓      | ✓       |                                                    |
 | xdebug         | ✓      | ✓      | ✓      | ✓ 3.5.1 | Use v3.5.1 for PHP 8.5 (3.4.x rejects PHP ≥ 8.5) |
 | yaml           | ✓      | ✓      | ✓      | ✓       |                                                    |
-| opcache        | ✓      | ✓      | ✓      | static  | Built into PHP 8.5 — no .so; comment out ini line  |
+| opcache        | ✓      | ✓      | ✓      | static  | Built into PHP 8.5+ — no .so; comment out ini line |
 | pgsql          | ✓      | ✓      | ✓      | ✓       | Needs `LIBS="-lpq -lssl -lcrypto -lz"`             |
 | pdo_pgsql      | ✓      | ✓      | ✓      | ✓       | Same as pgsql                                      |
 | sysvsem        | ✓      | ✓      | ✓      | ✓       | System V semaphores; disabled by default           |
@@ -308,14 +313,14 @@ Three files are needed in `conf/` for each PHP version: `php.ini`, `pear.conf`, 
 
 ### Recommended: Automatic Configuration
 
-We provide a Python script `configure-mamp-ini.py` that automatically generates and configures all three files for all PHP versions (`8.2.32`, `8.3.32`, `8.4.23`, and `8.5.8`).
+We provide a Python script `configure-mamp-ini.py` that automatically generates and configures all three files for all PHP versions (`8.2.x`, `8.3.x`, `8.4.x`, `8.5.x`, and `8.6.x`).
 
 It automatically:
 - Creates the missing `conf/` directories.
 - Dynamically updates serialized paths and string lengths in `pear.conf`.
 - Formats and injects the complete extension policies for live and template configs.
 - Comments out deprecated session settings (`session.sid_length = 26` and `session.sid_bits_per_character = 5`) for PHP 8.4+ to prevent startup warnings.
-- Disables OPcache dynamic loading in PHP 8.5.8 (since it is statically compiled).
+- Disables OPcache dynamic loading in PHP 8.5+ (since it is statically compiled).
 
 To generate configurations for all versions, simply run:
 ```bash
@@ -376,13 +381,13 @@ with open('/Applications/MAMP/bin/php/php8.2.0/conf/pear.conf') as f:
     base = f.read()
 
 # Same API hash (same minor version):
-result = update_pear_conf(base, 'php8.2.0', 'php8.2.32')
+result = update_pear_conf(base, 'php8.2.0', 'php8.2.34')
 
 # Different API hash (new minor/major):
-# result = update_pear_conf(base, 'php8.2.0', 'php8.3.32',
+# result = update_pear_conf(base, 'php8.2.0', 'php8.3.35',
 #     'no-debug-non-zts-20220829', 'no-debug-non-zts-20230831')
 
-with open('/Applications/MAMP/bin/php/php8.3.32/conf/pear.conf', 'w') as f:
+with open('/Applications/MAMP/bin/php/php8.3.35/conf/pear.conf', 'w') as f:
     f.write(result)
 ```
 
@@ -395,13 +400,13 @@ with open('/Applications/MAMP/bin/php/php8.2.0/conf/php.ini.temp') as f:
     base = f.read()
 
 # Same API hash:
-result = base.replace('php8.2.0', 'php8.2.32')
+result = base.replace('php8.2.0', 'php8.2.34')
 
 # Different API hash:
-# result = base.replace('php8.2.0', 'php8.3.32') \
+# result = base.replace('php8.2.0', 'php8.3.35') \
 #              .replace('no-debug-non-zts-20220829', 'no-debug-non-zts-20230831')
 
-with open('/Applications/MAMP/bin/php/php8.3.32/conf/php.ini.temp', 'w') as f:
+with open('/Applications/MAMP/bin/php/php8.3.35/conf/php.ini.temp', 'w') as f:
     f.write(result)
 ```
 
@@ -416,17 +421,17 @@ The last line of `php.ini.temp` must read:
 
 ```bash
 # Check PHP binary
-/Applications/MAMP/bin/php/php8.3.32/bin/php -v
+/Applications/MAMP/bin/php/php8.3.35/bin/php -v
 
 # Check loaded extensions
-/Applications/MAMP/bin/php/php8.3.32/bin/php -m
+/Applications/MAMP/bin/php/php8.3.35/bin/php -m
 
 # Check no external dylib deps (should only show MAMP + system libs)
-otool -L /Applications/MAMP/bin/php/php8.3.32/bin/php | grep -v MAMP | grep -v /usr/lib | grep -v /System
+otool -L /Applications/MAMP/bin/php/php8.3.35/bin/php | grep -v MAMP | grep -v /usr/lib | grep -v /System
 
 # Verify OpenSSL version used
-/Applications/MAMP/bin/php/php8.3.32/bin/php -r "echo openssl_get_cipher_methods()[0];"
-/Applications/MAMP/bin/php/php8.3.32/bin/php -r "phpinfo();" | grep -i openssl
+/Applications/MAMP/bin/php/php8.3.35/bin/php -r "echo openssl_get_cipher_methods()[0];"
+/Applications/MAMP/bin/php/php8.3.35/bin/php -r "phpinfo();" | grep -i openssl
 ```
 
 ---
@@ -548,7 +553,7 @@ If you manually edit `pear.conf`, update the `s:N:` length prefix for every stri
 **PHP 8.5 + OPcache:** `php.ini.temp` contains a `MAMP_OPcache_MAMP` placeholder pointing to `opcache.so`. Since OPcache is static in PHP 8.5, no `opcache.so` exists.
 
 > [!WARNING]
-> **MAMP PRO GUI Compatibility Limit:** PHP 8.5.x is **not** supported by the MAMP PRO v6.x GUI/dropdown menu. The legacy app binary contains compiled-in version validations that filter out version numbers `>= 8.5.0` (even when spoofing directories or binaries). However, PHP 8.5.8 remains fully functional for command-line use (CLI) and custom Apache/CGI setups.
+> **MAMP PRO GUI Compatibility Limit:** PHP 8.5.x and 8.6.x are **not** supported by the MAMP PRO v6.x GUI/dropdown menu. The legacy app binary contains compiled-in version validations that filter out version numbers `>= 8.5.0` (even when spoofing directories or binaries). However, PHP 8.5.x and 8.6.x remain fully functional for command-line use (CLI) and custom Apache/CGI setups.
 
 ---
 
@@ -569,7 +574,7 @@ OPcache still works and all `opcache.*` ini settings apply.
 `ext/standard/php_smart_string.h` was removed; functionality moved to `Zend/zend_smart_string.h`. Create a compat shim before building extensions (affects igbinary, oauth, redis, yaml, memcached, imagick):
 
 ```bash
-cat > /Applications/MAMP/bin/php/php8.5.8/include/php/ext/standard/php_smart_string.h << 'EOF'
+cat > /Applications/MAMP/bin/php/php8.5.11/include/php/ext/standard/php_smart_string.h << 'EOF'
 #pragma once
 #include "Zend/zend_smart_string.h"
 EOF
@@ -582,7 +587,7 @@ EOF
 `ext/standard/php_random.h` moved to `ext/random/php_random.h`. The `php_rand.h` shim for mcrypt must point to the new location:
 
 ```bash
-cat > /Applications/MAMP/bin/php/php8.5.8/include/php/ext/standard/php_rand.h << 'EOF'
+cat > /Applications/MAMP/bin/php/php8.5.11/include/php/ext/standard/php_rand.h << 'EOF'
 #pragma once
 #include "ext/random/php_random.h"
 EOF
@@ -601,6 +606,29 @@ EOF
 | memcached  | 3.3.0               | **3.4.0**       |
 
 `build-mamp-ext.sh` uses the correct version automatically when building for PHP 8.5 via `ext85`.
+
+---
+
+## PHP 8.6 Gotchas
+
+### FreeType Header & `HAVE_FT2BUILD_H`
+
+In PHP 8.6, the bundled `libgd` requires `<ft2build.h>` to be included before `<freetype/freetype.h>`. PHP's `gd.c` wraps `<ft2build.h>` inside `#if defined(HAVE_FT2BUILD_H)`. If this macro is undefined during compilation against external FreeType headers, the compiler directly encounters `<freetype/freetype.h>` and errors with:
+```
+#error "ft2build.h" hasn't been included yet!
+```
+`build-php-mamp.sh` resolves this automatically by adding `-DHAVE_FT2BUILD_H` to `FREETYPE2_CFLAGS` and defining `#define HAVE_FT2BUILD_H 1` in `main/php_config.h`.
+
+### WebP Linker Libraries (`libwebpdemux` & `libwebpmux`)
+
+PHP 8.6 GD animated WebP and probe routines reference symbols in `libwebpdemux` and `libwebpmux` (e.g. `WebPAnimDecoderNewInternal`, `WebPMuxCreateInternal`). `build-php-mamp.sh` ensures `WEBP_LIBS` includes `-lwebpdemux -lwebpmux` alongside `-lwebp`.
+
+### PECL Extension Support for PHP 8.6
+
+Several upstream PECL extensions do not yet have official releases supporting PHP 8.6:
+- `xdebug` explicitly rejects PHP `>= 8.6.0` during configure.
+- `apcu` requires source adjustments for removed/changed internal APIs (e.g. `zval_dtor`).
+- `ssh2`, `pgsql`, `pdo_pgsql`, and `tidy` compile and install cleanly for PHP 8.6 via `bash build-mamp-ext.sh ext86`.
 
 ---
 

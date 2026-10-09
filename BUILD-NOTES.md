@@ -1,13 +1,13 @@
 ---
 name: mamp-php-build
-description: "PHP 8.2.32, 8.3.32, 8.4.23, 8.5.8 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
+description: "PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11, 8.6.0RC3 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 3aba1562-b5c3-44a5-b50e-3e6e54ef7924
 ---
 
-PHP 8.2.32, 8.3.32, 8.4.23, and 8.5.8 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
+PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11, and 8.6.0RC3 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
 
 **Why:** MAMP PRO v6.9 no longer offers newer PHP packages for download; only v7.x gets updates. Homebrew packages were rejected — all deps must be self-contained in `/Applications/MAMP/Library`.
 
@@ -100,6 +100,7 @@ API hashes by PHP version:
 - PHP 8.3.x: `no-debug-non-zts-20230831`
 - PHP 8.4.x: `no-debug-non-zts-20240924`
 - PHP 8.5.x: `no-debug-non-zts-20250925`
+- PHP 8.6.x: `no-debug-non-zts-20260924`
 
 ### 4. conf/php.ini.temp (MISSING from fresh build — must create manually)
 MAMP PRO template file (contains `MAMP_xxx_MAMP` placeholders, not live values).
@@ -342,3 +343,21 @@ bash build-mamp-ext.sh memcached
 bash build-mamp-ext.sh pgsql
 ```
 Then check: `ls /Applications/MAMP/bin/php/php8.3.32/lib/php/extensions/no-debug-non-zts-20230831/`
+
+---
+
+## PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11, and 8.6.0RC3 Update (2026-10)
+
+Target versions updated to latest upstream releases (released September 24, 2026) plus PHP 8.6 preview support (8.6.0RC3):
+- `php8.2.34` (`no-debug-non-zts-20220829`)
+- `php8.3.35` (`no-debug-non-zts-20230831`)
+- `php8.4.26` (`no-debug-non-zts-20240924`)
+- `php8.5.11` (`no-debug-non-zts-20250925`)
+- `php8.6.0RC3` (`no-debug-non-zts-20260924`)
+
+### Build fixes added for PHP 8.6:
+1. **FreeType compilation**: Bundled `libgd` requires `<ft2build.h>`. Added `-DHAVE_FT2BUILD_H` to `FREETYPE2_CFLAGS` and auto-appended `#define HAVE_FT2BUILD_H 1` in `main/php_config.h`.
+2. **WebP animated decoder**: Added `-lwebpdemux -lwebpmux` to `WEBP_LIBS`.
+3. **PECL extensions**: Configured `ext86` target and compatibility shims in `build-mamp-ext.sh`.
+4. **RC / QA download support**: Added automatic fallback to `qa.php.net` and GitHub tags in `build-php-mamp.sh` for pre-release versions.
+

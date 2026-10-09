@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build missing PHP extensions for MAMP PHP 8.2.32, 8.3.32, 8.4.23, 8.5.8
+# Build missing PHP extensions for MAMP PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11
 # All deps built from source — no Homebrew dependencies
 # Usage: ./build-mamp-ext.sh [target]
 # Targets: all | deps | ext | <specific> (see case block at bottom)
@@ -9,14 +9,16 @@ set -euo pipefail
 # ── Paths ─────────────────────────────────────────────────────────────────────
 MAMP=/Applications/MAMP
 MAMPLIB=$MAMP/Library
-PHP82=$MAMP/bin/php/php8.2.33
-PHP83=$MAMP/bin/php/php8.3.33
-PHP84=$MAMP/bin/php/php8.4.24
-PHP85=$MAMP/bin/php/php8.5.9
+PHP82=$MAMP/bin/php/php8.2.34
+PHP83=$MAMP/bin/php/php8.3.35
+PHP84=$MAMP/bin/php/php8.4.26
+PHP85=$MAMP/bin/php/php8.5.11
+PHP86=$MAMP/bin/php/php8.6.0RC3
 EXT82=$PHP82/lib/php/extensions/no-debug-non-zts-20220829
 EXT83=$PHP83/lib/php/extensions/no-debug-non-zts-20230831
 EXT84=$PHP84/lib/php/extensions/no-debug-non-zts-20240924
 EXT85=$PHP85/lib/php/extensions/no-debug-non-zts-20250925
+EXT86=$PHP86/lib/php/extensions/no-debug-non-zts-20260924
 BUILD="/tmp/php-build-${USER:-mamp}"
 DEPS=$BUILD/ext-deps        # static libs installed here
 SRC=$BUILD/ext-src          # source trees unpacked here
@@ -106,14 +108,19 @@ preflight() {
   [ -x "$PHP83/bin/phpize" ]        || { err "Missing $PHP83/bin/phpize"; fail=1; }
   [ -x "$PHP84/bin/phpize" ]        || { err "Missing $PHP84/bin/phpize"; fail=1; }
   [ -x "$PHP85/bin/phpize" ]        || { err "Missing $PHP85/bin/phpize"; fail=1; }
+  if [ "$TARGET" = "ext86" ] || [ -d "$PHP86" ]; then
+    [ -x "$PHP86/bin/phpize" ]      || { err "Missing $PHP86/bin/phpize"; fail=1; }
+  fi
   [ $fail -eq 0 ] || exit 1
 
-  # Create php_smart_string.h shim for PHP 8.5
-  local smart_string_h="$PHP85/include/php/ext/standard/php_smart_string.h"
-  if [ -d "$(dirname "$smart_string_h")" ] && [ ! -f "$smart_string_h" ]; then
-    printf '#pragma once\n#include "Zend/zend_smart_string.h"\n' > "$smart_string_h"
-    log "Created php_smart_string.h shim for PHP 8.5"
-  fi
+  # Create php_smart_string.h shim for PHP 8.5 & PHP 8.6
+  for phpdir in "$PHP85" "$PHP86"; do
+    local smart_string_h="$phpdir/include/php/ext/standard/php_smart_string.h"
+    if [ -d "$(dirname "$smart_string_h")" ] && [ ! -f "$smart_string_h" ]; then
+      printf '#pragma once\n#include "Zend/zend_smart_string.h"\n' > "$smart_string_h"
+      log "Created php_smart_string.h shim for $(basename $phpdir)"
+    fi
+  done
 }
 
 # ── OpenSSL dylib hide/restore ─────────────────────────────────────────────────
@@ -189,6 +196,12 @@ build_ext_both() {
 build_ext_85only() {
   local srcdir=$1 configure_args="${2:-}"
   _build_ext_one "$PHP85" "$EXT85" "$srcdir" "$configure_args"
+}
+
+# Build extension for PHP 8.6 only
+build_ext_86only() {
+  local srcdir=$1 configure_args="${2:-}"
+  _build_ext_one "$PHP86" "$EXT86" "$srcdir" "$configure_args"
 }
 
 # Soft-fail wrapper: log warning but don't abort the whole build
@@ -517,7 +530,7 @@ build_yaz_ext() {
 
 build_sysv_ext() {
   log "── sysvsem + sysvshm + sysvmsg + shmop (from PHP source) ──"
-  for PHP_VER in 8.2.33 8.3.33 8.4.24 8.5.9; do
+  for PHP_VER in 8.2.34 8.3.35 8.4.26 8.5.11; do
     local php_src="$SRC/php-$PHP_VER"
     local php_src_alt="$BUILD/php-$PHP_VER"
     if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
@@ -533,17 +546,17 @@ build_sysv_ext() {
 
   for ext in sysvsem sysvshm sysvmsg shmop; do
     log "  ── $ext ──"
-    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.33/ext/$ext" ""
-    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.33/ext/$ext" ""
-    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.24/ext/$ext" ""
-    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.9/ext/$ext"  ""
+    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.34/ext/$ext" ""
+    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.35/ext/$ext" ""
+    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.26/ext/$ext" ""
+    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.11/ext/$ext"  ""
   done
 }
 
 build_pgsql_ext() {
   log "── pgsql + pdo_pgsql (from PHP source) ──"
   # These are bundled extensions — need PHP source tree
-  for PHP_VER in 8.2.33 8.3.33 8.4.24 8.5.9; do
+  for PHP_VER in 8.2.34 8.3.35 8.4.26 8.5.11; do
     local php_src="$SRC/php-$PHP_VER"
     # PHP build trees in /tmp/php-build are also valid sources
     local php_src_alt="$BUILD/php-$PHP_VER"
@@ -563,14 +576,14 @@ build_pgsql_ext() {
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
 
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.33/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.33/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.24/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.9/ext/pgsql"      "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.33/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.33/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.24/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.9/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.34/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.35/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.26/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.11/ext/pgsql"      "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.34/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.35/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.26/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.11/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
 
   unset LDFLAGS LIBS
   restore_mamp_ssl
@@ -636,13 +649,13 @@ build_mcrypt_ext_85() {
 
 build_pgsql_ext_85() {
   log "── pgsql + pdo_pgsql (PHP 8.5 only) ──"
-  local php_src="$SRC/php-8.5.8"
-  local php_src_alt="$BUILD/php-8.5.8"
+  local php_src="$SRC/php-8.5.11"
+  local php_src_alt="$BUILD/php-8.5.11"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
     ln -sf "$php_src_alt" "$php_src"
   elif [ ! -d "$php_src" ]; then
-    log "  fetch PHP 8.5.8 source..."
-    curl -fsSL "https://www.php.net/distributions/php-8.5.8.tar.gz" | tar xz -C "$SRC"
+    log "  fetch PHP 8.5.11 source..."
+    curl -fsSL "https://www.php.net/distributions/php-8.5.11.tar.gz" | tar xz -C "$SRC"
   fi
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
@@ -699,6 +712,97 @@ build_all_ext_85only() {
   try_build pgsql          build_pgsql_ext_85
 }
 
+# ── PHP 8.6 ONLY extensions ───────────────────────────────────────────────────
+# Run these AFTER building PHP 8.6 via build-php-mamp.sh.
+# Usage: ./build-mamp-ext.sh ext86
+
+build_igbinary_86() {
+  log "── igbinary $IGBINARY_VER (PHP 8.6 only) ──"
+  fetch_pecl "igbinary" "$IGBINARY_VER"
+  build_ext_86only "$SRC/igbinary-$IGBINARY_VER" || return 1
+  local igbinary_h="$SRC/igbinary-$IGBINARY_VER/src/php7/igbinary.h"
+  local inc="$PHP86/include/php/ext/igbinary"
+  mkdir -p "$inc"
+  cp "$igbinary_h" "$inc/igbinary.h"
+  log "  igbinary.h installed to PHP 8.6 include dir"
+}
+
+build_mcrypt_ext_86() {
+  log "── mcrypt $MCRYPT_VER (PHP 8.6 only) ──"
+  fetch_pecl "mcrypt" "$MCRYPT_VER"
+  local DIR="$SRC/mcrypt-$MCRYPT_VER"
+  local rand_h="$PHP86/include/php/ext/standard/php_rand.h"
+  if [ ! -f "$rand_h" ]; then
+    printf '#pragma once\n#include "ext/random/php_random.h"\n#ifndef php_rand\n#define php_rand() rand()\n#endif\n' > "$rand_h"
+  fi
+  build_ext_86only "$DIR" "--with-mcrypt=$DEPS"
+}
+
+build_pgsql_ext_86() {
+  log "── pgsql + pdo_pgsql (PHP 8.6 only) ──"
+  local php_src="$SRC/php-8.6.0RC3"
+  local php_src_alt="$BUILD/php-8.6.0RC3"
+  if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
+    ln -sf "$php_src_alt" "$php_src"
+  elif [ ! -d "$php_src" ]; then
+    log "  fetch PHP 8.6.0RC3 source..."
+    curl -fsSL "https://downloads.php.net/~svpernova09/php-8.6.0RC3.tar.gz" | tar xz -C "$SRC"
+  fi
+  hide_mamp_ssl
+  export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
+  export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
+  _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/pgsql"     "--with-pgsql=$DEPS"
+  _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  unset LDFLAGS LIBS
+  restore_mamp_ssl
+}
+
+build_ssh2_86() {
+  log "── ssh2 $SSH2_VER (PHP 8.6 only) ──"
+  fetch_pecl "ssh2" "$SSH2_VER"
+  hide_mamp_ssl
+  export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
+  export LIBS="-lssl -lcrypto"
+  build_ext_86only "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS"
+  unset LDFLAGS LIBS
+  restore_mamp_ssl
+}
+
+_build_apcu_86()           { fetch_pecl "apcu" "$APCU_VER";                   build_ext_86only "$SRC/apcu-$APCU_VER"; }
+_build_oauth_86()          { fetch_pecl "oauth" "$OAUTH_VER85";               build_ext_86only "$SRC/oauth-$OAUTH_VER85"; }
+_build_uploadprogress_86() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_86only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
+_build_xdebug_86()         { fetch_pecl "xdebug" "$XDEBUG_VER85";             build_ext_86only "$SRC/xdebug-$XDEBUG_VER85"; }
+_build_redis_86()          { fetch_pecl "redis" "$REDIS_VER";                 build_ext_86only "$SRC/redis-$REDIS_VER" "--enable-redis-igbinary"; }
+_build_yaml_86()           { fetch_pecl "yaml" "$YAML_VER";                   build_ext_86only "$SRC/yaml-$YAML_VER" "--with-yaml=$DEPS"; }
+_build_memcached_86()      { fetch_pecl "memcached" "$MEMCACHED_VER85";       build_ext_86only "$SRC/memcached-$MEMCACHED_VER85" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"; }
+_build_imagick_86() {
+  fetch_pecl "imagick" "$IMAGICK_VER"
+  local DIR="$SRC/imagick-$IMAGICK_VER"
+  if grep -q "php_strtolower" "$DIR/imagick.c" 2>/dev/null; then
+    sed -i.bak 's/php_strtolower(\([^,]*\), \([^)]*\))/zend_str_tolower_copy(\1, \1, \2)/g' "$DIR/imagick.c" || true
+    if grep -q "php_strtolower" "$DIR/imagick.c"; then
+      sed -i.bak2 '1s|^|#ifndef php_strtolower\n#define php_strtolower(s,l) zend_str_tolower(s,l)\n#endif\n|' "$DIR/imagick.c"
+    fi
+  fi
+  build_ext_86only "$DIR" "--with-imagick=$DEPS"
+}
+
+build_all_ext_86only() {
+  # igbinary first — redis/memcached depend on its headers
+  try_build igbinary       build_igbinary_86
+  try_build apcu           _build_apcu_86
+  try_build oauth          _build_oauth_86
+  try_build uploadprogress _build_uploadprogress_86
+  try_build xdebug         _build_xdebug_86
+  try_build redis          _build_redis_86
+  try_build yaml           _build_yaml_86
+  try_build ssh2           build_ssh2_86
+  try_build mcrypt         build_mcrypt_ext_86
+  try_build memcached      _build_memcached_86
+  try_build imagick        _build_imagick_86
+  try_build pgsql          build_pgsql_ext_86
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 TARGET="${1:-all}"
 preflight
@@ -736,6 +840,7 @@ case "$TARGET" in
   pgsql)          build_pgsql_ext ;;
   ext)            build_all_ext ;;
   ext85)          build_all_ext_85only ;;
+  ext86)          build_all_ext_86only ;;
 
   all)
     log "=== Phase 1: C dependencies ==="
@@ -745,7 +850,7 @@ case "$TARGET" in
     ;;
   *)
     err "Unknown target: $TARGET"
-    echo "Usage: $0 [all|deps|ext|ext85|libyaml|libssh2|libmcrypt|libmemcached|libpq|libjpeg|libpng|libtiff|libwebp|freetype|imagemagick|libyaz|apcu|igbinary|oauth|redis|uploadprogress|xdebug|yaml|ssh2|mcrypt|memcached|imagick|yaz|sysv|pgsql]"
+    echo "Usage: $0 [all|deps|ext|ext85|ext86|libyaml|libssh2|libmcrypt|libmemcached|libpq|libjpeg|libpng|libtiff|libwebp|freetype|imagemagick|libyaz|apcu|igbinary|oauth|redis|uploadprogress|xdebug|yaml|ssh2|mcrypt|memcached|imagick|yaz|sysv|pgsql]"
     exit 1 ;;
 esac
 
