@@ -2,7 +2,9 @@
 
 MAMP PRO v6.9 no longer ships newer PHP packages — updates are v7.x-only. This guide covers building PHP from source and installing it into MAMP's directory structure on both Apple Silicon (arm64) and Intel (x86_64).
 
-**Tested with:** PHP 8.2.34, PHP 8.3.35, PHP 8.4.26, PHP 8.5.11, PHP 8.6.0RC3 on MAMP v6.9, macOS Sequoia (arm64 and x86_64)  
+**Minimum OS:** macOS 12.0 (Monterey). Every artifact is compiled with `MACOSX_DEPLOYMENT_TARGET=12.0`, so the result runs on macOS 12 and newer. The SDK used to compile is newer (27.0 on the machine used for these builds) — SDK version is not the runtime requirement.
+
+**Tested with:** PHP 8.2.34, PHP 8.3.35, PHP 8.4.26, PHP 8.5.11, PHP 8.6.0RC3 on MAMP v6.9, macOS 12 (Monterey) and newer (arm64 and x86_64); built on macOS 27.0.1 / SDK 27.0 (arm64 host)
 
 ### Environment variables
 
@@ -75,6 +77,9 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 ---
 
 ## Prerequisites
+
+### macOS version
+macOS 12.0 (Monterey) or newer, on Apple Silicon (arm64) or Intel (x86_64). The build scripts default `MACOSX_DEPLOYMENT_TARGET` to `12.0`; raise it only if you deliberately want a higher floor. See [macOS OS Version Backward Compatibility](#macos-os-version-backward-compatibility).
 
 ### Xcode Command Line Tools
 ```bash
@@ -471,6 +476,16 @@ otool -L /Applications/MAMP/bin/php/php8.3.35/bin/php | grep -v MAMP | grep -v /
 # Verify OpenSSL version used
 /Applications/MAMP/bin/php/php8.3.35/bin/php -r "echo openssl_get_cipher_methods()[0];"
 /Applications/MAMP/bin/php/php8.3.35/bin/php -r "phpinfo();" | grep -i openssl
+
+# Verify the runtime floor (minos = minimum OS required; sdk = SDK used to compile)
+otool -l /Applications/MAMP/bin/php/php8.3.35/bin/php | grep -A4 LC_BUILD_VERSION
+# expect: platform 1 / minos 12.0 / sdk <host SDK>
+
+# Same check across every bundled extension
+for so in /Applications/MAMP/bin/php/php8.3.35/lib/php/extensions/*/*.so; do
+  printf "%-25s %s\n" "$(basename "$so")" \
+    "$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
+done
 ```
 
 ---
@@ -692,8 +707,12 @@ Do not specify `-isystem /Library/Developer/CommandLineTools/.../c++/v1` inside 
 
 ### macOS OS Version Backward Compatibility
 
-By default, Apple's clang compiles binaries targetting the host machine's macOS SDK version (e.g. macOS 15.4 Sequoia). Binaries linking against modern system libraries (using new system symbols like `strchrnul` introduced in 15.4) are not backward-compatible and will crash immediately with `dyld: Symbol not found` when run on older macOS versions:
-* **Fix:** If targetting older macOS versions (e.g. Monterey 12.x or Ventura 13.x), compile all dependencies, PHP, and extensions with the target environment variable set:
+Apple's clang stamps each binary with two versions: `minos` (minimum OS the binary will load on) and `sdk` (the SDK it was compiled against). `sdk` is taken from the build host (27.0 on the machine these artifacts were built on) and is not a runtime requirement — `minos` is. If you build without setting a deployment target, `minos` defaults to the host OS, and a binary linking modern system symbols (e.g. `strchrnul`, introduced in macOS 15.4) crashes immediately with `dyld: Symbol not found` on anything older:
+
+* **Fix:** target the oldest OS you intend to support. All four scripts (`build-php-mamp.sh`, `build-mamp-ext.sh`, `build-curl-mamp.sh`, `compile-all-php.sh`) already default to `12.0`, and read the variable when set:
   ```bash
-  export MACOSX_DEPLOYMENT_TARGET="12.0"
+  export MACOSX_DEPLOYMENT_TARGET="12.0"   # Monterey — the default in these scripts
   ```
+  Raise it (e.g. `13.0` for Ventura, `15.0` for Sequoia) only when you deliberately want a higher floor.
+
+* **Verify:** `minos` on the shipped `php`, `php-cgi` and every `.so` should read `12.0` — see [Verification](#verification). Dependencies built as side effects (notably `libpq`) must use the same target, otherwise the extension links against symbols the floor does not provide; see [libpq build target and linking crashes](#libpq-build-target-and-linking-crashes).

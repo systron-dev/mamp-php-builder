@@ -12,11 +12,12 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | `build-php-mamp.sh` | Configure PHP from source (run before `make`) |
 | `build-curl-mamp.sh` | Rebuild libcurl against OpenSSL 3 |
 | `build-mamp-ext.sh` | Build all C deps + PECL extensions |
+| `package-mamp-php.sh` | Package builds into `dist/` tarballs with correct architecture suffix |
 | `php8.2.34-arm64.tar.gz` | Pre-built PHP 8.2.34 for Apple Silicon |
 | `php8.3.35-arm64.tar.gz` | Pre-built PHP 8.3.35 for Apple Silicon |
 | `php8.4.26-arm64.tar.gz` | Pre-built PHP 8.4.26 for Apple Silicon |
 | `php8.5.11-arm64.tar.gz` | Pre-built PHP 8.5.11 for Apple Silicon |
-| `php8.6.0-arm64.tar.gz` | Pre-built PHP 8.6.0RC3 for Apple Silicon, unpacking to `php8.6.0/` |
+| `php8.6.0RC3-arm64.tar.gz` | Pre-built PHP 8.6.0RC3 for Apple Silicon, unpacking to `php8.6.0/` |
 
 ### Install directory naming
 
@@ -79,15 +80,38 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
   sudo port install pkgconfig autoconf automake libtool openssl3 libxml2 curl zlib bzip2 libiconv pcre2 libjpeg-turbo libpng freetype webp icu libsodium libmcrypt oniguruma5 libzip
   ```
 
+## Build environment
+
+**Minimum OS:** macOS 12.0 (Monterey) — every artifact targets
+`MACOSX_DEPLOYMENT_TARGET=12.0`, so they run on macOS 12 and newer. Verified with
+`otool -l`: `minos 12.0` on `bin/php`, `bin/php-cgi` and every bundled `.so`. The `sdk`
+component is higher (27.0 on the current host) — that is the SDK used to compile, not the
+minimum required runtime.
+
+Host everything in this repo was built and is running on:
+
+| Item | Value |
+|------|-------|
+| macOS | 27.0.1 (build 26A434) |
+| Darwin kernel | 27.0.0 |
+| Architecture | arm64 (Apple Silicon) |
+| SDK | 27.0 |
+| Deployment target | 12.0 |
+| MAMP | 6.9 at `/Applications/MAMP` |
+
+Override the target when building for an older floor, e.g. `MACOSX_DEPLOYMENT_TARGET=13.0 bash build-php-mamp.sh 8.5.11` — all four scripts read it, defaulting to `12.0`.
+
+`x86_64` artifacts are not built on this host — they require a separate Intel Mac (or a Rosetta 2 shell) running the same scripts. They carry the same `minos 12.0`.
+
 ## Tested
 
-| PHP | Extensions | macOS |
-|-----|-----------|-------|
-| 8.2.34 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | Sequoia 15 (arm64 & x86_64) |
-| 8.3.35 | same as above | Sequoia 15 (arm64 & x86_64) |
-| 8.4.26 | same as above | Sequoia 15 (arm64 & x86_64) |
-| 8.5.11 | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | Sequoia 15 (arm64 & x86_64) |
-| 8.6.0RC3 | supported via `build-php-mamp.sh 8.6.0RC3` & `build-mamp-ext.sh ext86` | Sequoia 15 (arm64 & x86_64) |
+| PHP | Extensions | Runs on |
+|-----|-----------|---------|
+| 8.2.34 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | macOS 12.0+ (arm64 & x86_64) |
+| 8.3.35 | same as above | macOS 12.0+ (arm64 & x86_64) |
+| 8.4.26 | same as above | macOS 12.0+ (arm64 & x86_64) |
+| 8.5.11 | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | macOS 12.0+ (arm64 & x86_64) |
+| 8.6.0RC3 | supported via `build-php-mamp.sh 8.6.0RC3` & `build-mamp-ext.sh ext86` | macOS 12.0+ (arm64 & x86_64) |
 
 Extensions marked as "disabled by default": mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop — present as `.so` files, commented out in `php.ini` / `php.ini.temp`. Enable manually when needed.
 
