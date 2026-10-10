@@ -4,7 +4,11 @@ set -e
 MAMP="/Applications/MAMP/Library"
 BUILD="/tmp/php-build-${USER:-mamp}"
 START_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSIONS=("8.2.34" "8.3.35" "8.4.26" "8.5.11")
+VERSIONS=("8.2.34" "8.3.35" "8.4.26" "8.5.11" "8.6.0RC3")
+# Optional: pass versions as arguments to build a subset, e.g. `./compile-all-php.sh 8.6.0RC3`
+if [ $# -gt 0 ]; then
+  VERSIONS=("$@")
+fi
 
 # Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
 if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
@@ -18,8 +22,11 @@ fi
 echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
 
 for version in "${VERSIONS[@]}"; do
+  # MAMP Pro discovers versions via regex ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
+  # so RC/beta builds install into the numeric-only dir (8.6.0RC3 -> php8.6.0).
+  install_version=$(printf '%s' "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
   echo "=================================================="
-  echo "==> Configuring PHP $version"
+  echo "==> Configuring PHP $version (install dir: php${install_version})"
   echo "=================================================="
   cd "$START_DIR"
   bash build-php-mamp.sh "$version"
@@ -71,9 +78,9 @@ for version in "${VERSIONS[@]}"; do
 
   if [ -n "$LIBPHP_SRC" ]; then
     echo "==> Copying and signing Apache module libphp.so"
-    mkdir -p "/Applications/MAMP/bin/php/php${version}/modules"
-    cp "$LIBPHP_SRC" "/Applications/MAMP/bin/php/php${version}/modules/libphp.so"
-    codesign --force --sign - "/Applications/MAMP/bin/php/php${version}/modules/libphp.so"
+    mkdir -p "/Applications/MAMP/bin/php/php${install_version}/modules"
+    cp "$LIBPHP_SRC" "/Applications/MAMP/bin/php/php${install_version}/modules/libphp.so"
+    codesign --force --sign - "/Applications/MAMP/bin/php/php${install_version}/modules/libphp.so"
     
     # Also copy to global modules as fallback
     cp "$LIBPHP_SRC" "$MAMP/modules/"

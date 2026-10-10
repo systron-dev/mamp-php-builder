@@ -13,11 +13,16 @@
 
 set -e
 VERSION="$1"
+# Source version keeps any RC/beta suffix (tarball and build dir); the install dir
+# must be numeric-only. MAMP Pro only lists dirs matching
+#   ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
+# so installing 8.6.0RC3 as php8.6.0RC3 leaves the build invisible in the GUI.
+INSTALL_VERSION=$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
 ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
 MAMP=/Applications/MAMP/Library
 BUILD="/tmp/php-build-${USER:-mamp}"
 SRC="${BUILD}/php-${VERSION}"
-PREFIX="/Applications/MAMP/bin/php/php${VERSION}"
+PREFIX="/Applications/MAMP/bin/php/php${INSTALL_VERSION}"
 
 # Handle MACOSX_DEPLOYMENT_TARGET. If not set, prompt if interactive, or default to 12.0
 if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
@@ -80,7 +85,7 @@ export EDIT_CFLAGS="-I$MAMP/include"
 export EDIT_LIBS="-L$MAMP/lib -ledit"
 
 # Version-specific flags
-MAJOR_MINOR="${VERSION%.*}"
+MAJOR_MINOR="${INSTALL_VERSION%.*}"
 XMLRPC_FLAG=""
 # xmlrpc was removed from PHP core in 8.3 (PECL extension only)
 

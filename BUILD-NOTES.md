@@ -353,11 +353,12 @@ Target versions updated to latest upstream releases (released September 24, 2026
 - `php8.3.35` (`no-debug-non-zts-20230831`)
 - `php8.4.26` (`no-debug-non-zts-20240924`)
 - `php8.5.11` (`no-debug-non-zts-20250925`)
-- `php8.6.0RC3` (`no-debug-non-zts-20260924`)
+- `php8.6.0` — PHP 8.6.0RC3, installed under the stripped numeric name (`no-debug-non-zts-20260924`)
 
 ### Build fixes added for PHP 8.6:
 1. **FreeType compilation**: Bundled `libgd` requires `<ft2build.h>`. Added `-DHAVE_FT2BUILD_H` to `FREETYPE2_CFLAGS` and auto-appended `#define HAVE_FT2BUILD_H 1` in `main/php_config.h`.
 2. **WebP animated decoder**: Added `-lwebpdemux -lwebpmux` to `WEBP_LIBS`.
 3. **PECL extensions**: Configured `ext86` target and compatibility shims in `build-mamp-ext.sh`.
 4. **RC / QA download support**: Added automatic fallback to `qa.php.net` and GitHub tags in `build-php-mamp.sh` for pre-release versions.
+5. **Install dir naming for pre-releases**: MAMP Pro enumerates versions with `^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$`, so an RC suffix in the directory name (`php8.6.0RC3`) makes the build invisible in the GUI. The install prefix now strips the suffix (`8.6.0RC3` → `php8.6.0`) while the source tarball and build dir keep the full version string. The prefix is compiled into `bin/php` and `bin/php-cgi`, so retrofitting an older build by renaming its directory needs a compat symlink back to the old name — or a rebuild, which is the clean fix.
 

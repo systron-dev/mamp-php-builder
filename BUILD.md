@@ -53,7 +53,7 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
     ...extensions/no-debug-non-zts-20240924/
   php8.5.11/
     ...extensions/no-debug-non-zts-20250925/
-  php8.6.0RC3/
+  php8.6.0/                    (PHP 8.6.0RC3 — pre-releases install under numeric name)
     ...extensions/no-debug-non-zts-20260924/
 /tmp/php-build-${USER:-mamp}/         build workspace ($BUILD)
   build-php-mamp.sh                  PHP configure script
@@ -173,6 +173,45 @@ bash "$BUILD/build-php-mamp.sh" 8.6.0RC3
 ```
 
 The script runs `./configure` only — it does **not** run `make`.
+
+### Install directory naming
+
+MAMP Pro discovers PHP versions by matching the install path against
+`^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$` — the patch component
+must be digits only, with no suffix. A pre-release therefore installs under its numeric
+name: `8.6.0RC3` → `php8.6.0`. Installing as `php8.6.0RC3` leaves it invisible in the
+MAMP Pro GUI even though the binary works from the command line.
+
+`build-php-mamp.sh` and `compile-all-php.sh` strip the suffix automatically for the
+install prefix while keeping the full version string for the source tarball and build
+directory.
+
+**Existing installs and archives created before this change** need manual fixing. Renaming
+the directory is *not* enough on its own: the install prefix is baked into `bin/php` and
+`bin/php-cgi` (`PHP_CONFIG_FILE_PATH`, `extension_dir`, PEAR paths), so a bare rename leaves
+the CLI loading no `php.ini`.
+
+```bash
+cd /Applications/MAMP/bin/php
+mv php8.6.0RC3 php8.6.0
+ln -sfn php8.6.0 php8.6.0RC3          # keeps the baked-in paths resolvable
+cd php8.6.0
+for f in bin/phpize bin/php-config include/php/main/build-defs.h \
+         include/php/main/php_version.h php/man/man1/*.1 \
+         conf/php.ini conf/php.ini.temp; do
+  [ -f "$f" ] && perl -pi -e 's/8\.6\.0RC3/8.6.0/g' "$f"
+done
+```
+
+Do **not** run a blanket find/replace over the tree — `conf/pear.conf` stores paths inside
+serialized strings with explicit `s:N:"…"` lengths, and the binaries must not be rewritten.
+Regenerate the conf files instead, which handles both:
+
+```bash
+python3 configure-mamp-ini.py        # writes php8.6.0/conf with correct lengths
+```
+
+The clean fix is a rebuild — the symlink above is only a stopgap.
 
 **What it sets up:**
 - All pkg-config overrides to point at MAMP Library (no external paths)

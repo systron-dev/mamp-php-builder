@@ -21,6 +21,10 @@ versions = {
     "8.6.0RC3": "no-debug-non-zts-20260924",
 }
 
+# MAMP Pro only lists version dirs whose name is numeric-only (phpX.Y.Z), so RC
+# and beta builds are installed under the stripped numeric name.
+versions = {re.sub(r"^(\d+\.\d+\.\d+).*", r"\1", k): v for k, v in versions.items()}
+
 base_dir = "/Applications/MAMP/bin/php/php8.2.0/conf"
 
 # Read base files

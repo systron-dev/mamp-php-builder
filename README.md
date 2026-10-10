@@ -16,7 +16,22 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | `php8.3.35-arm64.tar.gz` | Pre-built PHP 8.3.35 for Apple Silicon |
 | `php8.4.26-arm64.tar.gz` | Pre-built PHP 8.4.26 for Apple Silicon |
 | `php8.5.11-arm64.tar.gz` | Pre-built PHP 8.5.11 for Apple Silicon |
-| `php8.6.0RC3-arm64.tar.gz` | Pre-built PHP 8.6.0RC3 for Apple Silicon |
+| `php8.6.0-arm64.tar.gz` | Pre-built PHP 8.6.0RC3 for Apple Silicon, unpacking to `php8.6.0/` |
+
+### Install directory naming
+
+MAMP Pro enumerates PHP versions by matching the install path against
+`^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$` — the patch component must
+be digits only, with no suffix. Pre-releases therefore install under their **numeric**
+name: `8.6.0RC3` → `php8.6.0`. A directory named `php8.6.0RC3` works from the command line
+but never appears in the MAMP Pro version list.
+
+Newer archives already unpack into `php8.6.0/`. Older ones carry a `php8.6.0RC3/`
+top-level directory. Renaming that directory alone is **not** sufficient — the prefix is
+baked into `bin/php` and `bin/php-cgi`, so the CLI would load no `php.ini` and
+`extension_dir` would point at a missing path. See the fix-up recipe in
+[BUILD.md](BUILD.md#install-directory-naming); rebuilding with the current scripts avoids
+the problem entirely.
 
 ### Pre-built archive naming
 
