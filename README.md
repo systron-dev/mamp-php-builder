@@ -8,16 +8,15 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 
 | File | Purpose |
 |------|---------|
+| `AGENTS.md` | Guidelines, rules, and context for AI coding agents |
 | `BUILD.md` | Full step-by-step guide |
 | `build-php-mamp.sh` | Configure PHP from source (run before `make`) |
 | `build-curl-mamp.sh` | Rebuild libcurl against OpenSSL 3 |
 | `build-mamp-ext.sh` | Build all C deps + PECL extensions |
+| `compile-all-php.sh` | Orchestration script to configure, compile, and install multiple PHP versions |
+| `configure-mamp-ini.py` | Generate and inject `php.ini`, `pear.conf`, and `php.ini.temp` |
 | `package-mamp-php.sh` | Package builds into `dist/` tarballs with correct architecture suffix |
-| `php8.2.34-arm64.tar.gz` | Pre-built PHP 8.2.34 for Apple Silicon |
-| `php8.3.35-arm64.tar.gz` | Pre-built PHP 8.3.35 for Apple Silicon |
-| `php8.4.26-arm64.tar.gz` | Pre-built PHP 8.4.26 for Apple Silicon |
-| `php8.5.11-arm64.tar.gz` | Pre-built PHP 8.5.11 for Apple Silicon |
-| `php8.6.0RC3-arm64.tar.gz` | Pre-built PHP 8.6.0RC3 for Apple Silicon, unpacking to `php8.6.0/` |
+| `dist/` | Pre-built archives for Apple Silicon (`arm64`) and Intel (`x86_64`) |
 
 ### Install directory naming
 
@@ -88,20 +87,21 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 component is higher (27.0 on the current host) — that is the SDK used to compile, not the
 minimum required runtime.
 
-Host everything in this repo was built and is running on:
+Host environments used for builds in this repo:
 
-| Item | Value |
-|------|-------|
-| macOS | 27.0.1 (build 26A434) |
-| Darwin kernel | 27.0.0 |
-| Architecture | arm64 (Apple Silicon) |
-| SDK | 27.0 |
-| Deployment target | 12.0 |
-| MAMP | 6.9 at `/Applications/MAMP` |
+| Item | Apple Silicon (`arm64`) | Intel (`x86_64`) |
+|------|-------------------------|------------------|
+| Hardware | Apple Silicon host | Mac mini 6-core Intel |
+| macOS | 27.0.1 (build 26A434) | macOS Sequoia 15 (15.8.1) |
+| Darwin kernel | 27.0.0 | — |
+| Architecture | arm64 | x86_64 |
+| SDK | 27.0 | — |
+| Deployment target | 12.0 | 12.0 |
+| MAMP | 6.9 at `/Applications/MAMP` | 6.9 at `/Applications/MAMP` |
 
 Override the target when building for an older floor, e.g. `MACOSX_DEPLOYMENT_TARGET=13.0 bash build-php-mamp.sh 8.5.11` — all four scripts read it, defaulting to `12.0`.
 
-`x86_64` artifacts are not built on this host — they require a separate Intel Mac (or a Rosetta 2 shell) running the same scripts. They carry the same `minos 12.0`.
+The latest `x86_64` artifacts were built on a Mac mini 6-core Intel running macOS Sequoia 15 (15.8.1). They carry the same `minos 12.0` deployment target.
 
 ## Tested
 
@@ -111,7 +111,10 @@ Override the target when building for an older floor, e.g. `MACOSX_DEPLOYMENT_TA
 | 8.3.35 | same as above | macOS 12.0+ (arm64 & x86_64) |
 | 8.4.26 | same as above | macOS 12.0+ (arm64 & x86_64) |
 | 8.5.11 | same as above (opcache static/built-in; xdebug 3.5.1, oauth 2.0.10, memcached 3.4.0) | macOS 12.0+ (arm64 & x86_64) |
-| 8.6.0RC3 | supported via `build-php-mamp.sh 8.6.0RC3` & `build-mamp-ext.sh ext86` | macOS 12.0+ (arm64 & x86_64) |
+| 8.6.0RC3 | core + static opcache, igbinary, ssh2, tidy, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop (via `ext86`; other PECL extensions pending upstream 8.6 support) | macOS 12.0+ (arm64 & x86_64) |
+
+> [!NOTE]
+> **MAMP PRO GUI Compatibility:** PHP versions `>= 8.5.0` are filtered out by the legacy MAMP PRO v6.x GUI dropdown due to internal app version checks. However, PHP 8.5.x and 8.6.x remain fully functional for CLI usage, custom virtual hosts, and custom Apache/CGI setups.
 
 Extensions marked as "disabled by default": mcrypt, ssh2, uploadprogress, yaml, sysvsem, sysvshm, sysvmsg, shmop — present as `.so` files, commented out in `php.ini` / `php.ini.temp`. Enable manually when needed.
 

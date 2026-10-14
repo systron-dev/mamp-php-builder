@@ -73,6 +73,7 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 | 8.3.x       | no-debug-non-zts-20230831  |
 | 8.4.x       | no-debug-non-zts-20240924  |
 | 8.5.x       | no-debug-non-zts-20250925  |
+| 8.6.x       | no-debug-non-zts-20260924  |
 
 ---
 
@@ -106,10 +107,14 @@ curl -LO https://www.php.net/distributions/php-8.2.34.tar.gz
 curl -LO https://www.php.net/distributions/php-8.3.35.tar.gz
 curl -LO https://www.php.net/distributions/php-8.4.26.tar.gz
 curl -LO https://www.php.net/distributions/php-8.5.11.tar.gz
+# For pre-releases / RCs (e.g. PHP 8.6.0RC3 from QA or GitHub php-src):
+# curl -LO https://downloads.php.net/~svpernova09/php-8.6.0RC3.tar.gz
 tar xzf php-8.2.34.tar.gz
 tar xzf php-8.3.35.tar.gz
 tar xzf php-8.4.26.tar.gz
 tar xzf php-8.5.11.tar.gz
+# tar xzf php-8.6.0RC3.tar.gz
+# Note: build-php-mamp.sh automatically handles downloading/extracting 8.6 pre-releases if not present.
 ```
 
 ---
@@ -323,27 +328,27 @@ bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 
 ### PHP extensions built
 
-| Extension      | 8.2.34 | 8.3.35 | 8.4.26 | 8.5.11  | Notes                                              |
-|----------------|--------|--------|--------|---------|----------------------------------------------------|
-| apcu           | ✓      | ✓      | ✓      | ✓       |                                                    |
-| igbinary       | ✓      | ✓      | ✓      | ✓       | Header installed to PHP include dirs               |
-| imagick        | ✓      | ✓      | ✓      | ✓       | `php_strtolower` removed in 8.4 — patched          |
-| mcrypt         | ✓      | ✓      | ✓      | ✓       | `php_rand.h` shim needed (path differs in 8.5)     |
-| memcached      | ✓      | ✓      | ✓      | ✓ 3.4.0 | Use v3.4.0 for PHP 8.5                            |
-| oauth          | ✓      | ✓      | ✓      | ✓ 2.0.10| Use v2.0.10 for PHP 8.5                           |
-| redis          | ✓      | ✓      | ✓      | ✓       | Built with igbinary support                        |
-| ssh2           | ✓      | ✓      | ✓      | ✓       | OpenSSL static symbols needed in `LIBS`            |
-| tidy           | ✓      | ✓      | ✓      | ✓       | Pre-existing in MAMP                               |
-| uploadprogress | ✓      | ✓      | ✓      | ✓       |                                                    |
-| xdebug         | ✓      | ✓      | ✓      | ✓ 3.5.1 | Use v3.5.1 for PHP 8.5 (3.4.x rejects PHP ≥ 8.5) |
-| yaml           | ✓      | ✓      | ✓      | ✓       |                                                    |
-| opcache        | ✓      | ✓      | ✓      | static  | Built into PHP 8.5+ — no .so; comment out ini line |
-| pgsql          | ✓      | ✓      | ✓      | ✓       | Needs `LIBS="-lpq -lssl -lcrypto -lz"`             |
-| pdo_pgsql      | ✓      | ✓      | ✓      | ✓       | Same as pgsql                                      |
-| sysvsem        | ✓      | ✓      | ✓      | ✓       | System V semaphores; disabled by default           |
-| sysvshm        | ✓      | ✓      | ✓      | ✓       | System V shared memory; disabled by default        |
-| sysvmsg        | ✓      | ✓      | ✓      | ✓       | System V message queues; disabled by default       |
-| shmop          | ✓      | ✓      | ✓      | ✓       | POSIX shared memory ops; disabled by default       |
+| Extension      | 8.2.34 | 8.3.35 | 8.4.26 | 8.5.11  | 8.6.0   | Notes                                              |
+|----------------|--------|--------|--------|---------|---------|----------------------------------------------------|
+| apcu           | ✓      | ✓      | ✓      | ✓       | ✗       | 8.6 requires internal API updates (e.g. zval_dtor) |
+| igbinary       | ✓      | ✓      | ✓      | ✓       | ✓       | Header installed to PHP include dirs               |
+| imagick        | ✓      | ✓      | ✓      | ✓       | ✗       | `php_strtolower` removed in 8.4; 8.6 compatibility |
+| mcrypt         | ✓      | ✓      | ✓      | ✓       | ✗       | `php_rand.h` shim needed                           |
+| memcached      | ✓      | ✓      | ✓      | ✓ 3.4.0 | ✗       | Use v3.4.0 for PHP 8.5                             |
+| oauth          | ✓      | ✓      | ✓      | ✓ 2.0.10| ✗       | Use v2.0.10 for PHP 8.5                            |
+| redis          | ✓      | ✓      | ✓      | ✓       | ✗       | Built with igbinary support                        |
+| ssh2           | ✓      | ✓      | ✓      | ✓       | ✓       | OpenSSL static symbols needed in `LIBS`            |
+| tidy           | ✓      | ✓      | ✓      | ✓       | ✓       | Pre-existing in MAMP                               |
+| uploadprogress | ✓      | ✓      | ✓      | ✓       | ✗       |                                                    |
+| xdebug         | ✓      | ✓      | ✓      | ✓ 3.5.1 | ✗       | 3.5.x rejects PHP ≥ 8.6.0                          |
+| yaml           | ✓      | ✓      | ✓      | ✓       | ✗       |                                                    |
+| opcache        | ✓      | ✓      | ✓      | static  | static  | Built into PHP 8.5+ & 8.6 — no .so; comment out ini|
+| pgsql          | ✓      | ✓      | ✓      | ✓       | ✓       | Needs `LIBS="-lpq -lssl -lcrypto -lz"`             |
+| pdo_pgsql      | ✓      | ✓      | ✓      | ✓       | ✓       | Same as pgsql                                      |
+| sysvsem        | ✓      | ✓      | ✓      | ✓       | ✓       | System V semaphores; disabled by default           |
+| sysvshm        | ✓      | ✓      | ✓      | ✓       | ✓       | System V shared memory; disabled by default        |
+| sysvmsg        | ✓      | ✓      | ✓      | ✓       | ✓       | System V message queues; disabled by default       |
+| shmop          | ✓      | ✓      | ✓      | ✓       | ✓       | POSIX shared memory ops; disabled by default       |
 
 **Not built:**
 - `imap` — no libc-client available; commented in php.ini
@@ -671,18 +676,38 @@ In PHP 8.6, the bundled `libgd` requires `<ft2build.h>` to be included before `<
 ```
 #error "ft2build.h" hasn't been included yet!
 ```
-`build-php-mamp.sh` resolves this automatically by adding `-DHAVE_FT2BUILD_H` to `FREETYPE2_CFLAGS` and defining `#define HAVE_FT2BUILD_H 1` in `main/php_config.h`.
+`build-php-mamp.sh` resolves this automatically by adding `-DHAVE_FT2BUILD_H` to `FREETYPE2_CFLAGS` and appending `#define HAVE_FT2BUILD_H 1` to `main/php_config.h`.
 
 ### WebP Linker Libraries (`libwebpdemux` & `libwebpmux`)
 
 PHP 8.6 GD animated WebP and probe routines reference symbols in `libwebpdemux` and `libwebpmux` (e.g. `WebPAnimDecoderNewInternal`, `WebPMuxCreateInternal`). `build-php-mamp.sh` ensures `WEBP_LIBS` includes `-lwebpdemux -lwebpmux` alongside `-lwebp`.
 
-### PECL Extension Support for PHP 8.6
+### OPcache is Statically Compiled (No opcache.so)
 
+As in PHP 8.5, OPcache is compiled directly into the PHP 8.6 core binary. No external `opcache.so` is built. The dynamic loading line `zend_extension=.../opcache.so` must remain commented out in `php.ini` (which `configure-mamp-ini.py` handles automatically for `8.6.x`). OPcache functionality is fully active built-in.
+
+### Deprecated Session Settings
+
+`session.sid_length = 26` and `session.sid_bits_per_character = 5` are deprecated in PHP 8.4+ and 8.6. `configure-mamp-ini.py` comments them out in generated `php.ini` and `php.ini.temp` to suppress startup deprecation warnings.
+
+### Pre-release Source Tarball Download Fallback
+
+PHP 8.6 is currently in pre-release/RC stages. `build-php-mamp.sh` includes automatic discovery fallbacks:
+1. Standard distribution download (`https://www.php.net/distributions/php-<version>.tar.gz`)
+2. PHP QA / Release Candidates API (`https://www.php.net/release-candidates.php?format=json` or `downloads.php.net`)
+3. GitHub release archive tag (`https://github.com/php/php-src/archive/refs/tags/php-<version>.tar.gz`)
+
+### PECL Extension Support for PHP 8.6 (`ext86`)
+
+Run extension compilation for PHP 8.6 using:
+```bash
+bash "$BUILD/build-mamp-ext.sh" ext86
+```
 Several upstream PECL extensions do not yet have official releases supporting PHP 8.6:
-- `xdebug` explicitly rejects PHP `>= 8.6.0` during configure.
+- `xdebug` explicitly rejects PHP `>= 8.6.0` during configure (`PHP 8.6 is not supported`).
 - `apcu` requires source adjustments for removed/changed internal APIs (e.g. `zval_dtor`).
-- `ssh2`, `pgsql`, `pdo_pgsql`, and `tidy` compile and install cleanly for PHP 8.6 via `bash build-mamp-ext.sh ext86`.
+- `imagick`, `memcached`, `oauth`, `redis`, `uploadprogress`, `yaml`, and `mcrypt` currently encounter build or internal API incompatibility errors upstream for 8.6.
+- `igbinary`, `ssh2`, `pgsql`, `pdo_pgsql`, `tidy`, and System V IPC extensions compile cleanly.
 
 ---
 
