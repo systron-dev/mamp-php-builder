@@ -19,6 +19,11 @@ versions = {
     "8.4.26": "no-debug-non-zts-20240924",
     "8.5.11": "no-debug-non-zts-20250925",
     "8.6.0RC3": "no-debug-non-zts-20260924",
+    "8.2.35": "no-debug-non-zts-20220829",
+    "8.3.36": "no-debug-non-zts-20230831",
+    "8.4.27": "no-debug-non-zts-20240924",
+    "8.5.12": "no-debug-non-zts-20250925",
+    "8.6.0RC4": "no-debug-non-zts-20260924",
 }
 
 # MAMP Pro only lists version dirs whose name is numeric-only (phpX.Y.Z), so RC
@@ -46,9 +51,55 @@ def update_pear_conf(content, old_ver, new_ver, old_hash, new_hash):
         return m.group(0)
     return re.sub(r's:\d+:"([^"]*)"', replace_serialized_str, content)
 
+# Extensions shipped as shared modules. Order matters: igbinary must load before
+# redis/memcached. pgsql/pdo_pgsql are only available once build-mamp-ext.sh ran.
+SHARED_EXTS = [
+    "apcu", "igbinary", "imagick", "memcached", "oauth", "redis", "tidy",
+    "imap", "pgsql", "pdo_pgsql", "mcrypt", "ssh2", "yaml", "uploadprogress",
+    "sysvsem", "sysvshm", "sysvmsg", "shmop",
+]
+# php.ini.temp uses MAMP_*_MAMP markers so MAMP PRO can toggle these in its GUI.
+MAMP_MARKERS = {
+    "apcu": "MAMP_apc_MAMP",
+    "igbinary": "MAMP_Igbinary_MAMP",
+    "imagick": "MAMP_Imagick_MAMP",
+    "memcached": "MAMP_Memcached_MAMP",
+    "oauth": "MAMP_Oauth_MAMP",
+    "redis": "MAMP_Redis_MAMP",
+    "tidy": "MAMP_Tidy_MAMP",
+}
+
+def ext_available(version, ext_hash, name):
+    path = f"/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/{name}.so"
+    return os.path.exists(path)
+
+def build_ini_ext_block(version, ext_hash):
+    """Enable every shared extension actually present; comment out absent ones."""
+    lines = []
+    for name in SHARED_EXTS:
+        prefix = "" if ext_available(version, ext_hash, name) else ";"
+        lines.append(f"{prefix}extension={name}.so")
+    if ext_available(version, ext_hash, "xdebug"):
+        lines.append(f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/xdebug.so"')
+    return "\n".join(lines)
+
+def build_temp_ext_block(version, ext_hash):
+    lines = []
+    for name in SHARED_EXTS:
+        prefix = "" if ext_available(version, ext_hash, name) else ";"
+        marker = MAMP_MARKERS.get(name, "")
+        lines.append(f"{prefix}{marker}extension={name}.so")
+    if ext_available(version, ext_hash, "xdebug"):
+        lines.append(f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/xdebug.so"')
+    return "\n".join(lines)
+
 for version, ext_hash in versions.items():
+    php_dir = f"/Applications/MAMP/bin/php/php{version}"
+    if not os.path.isdir(php_dir):
+        print(f"Skipping PHP {version} (not installed)")
+        continue
     print(f"Configuring PHP {version}...")
-    target_dir = f"/Applications/MAMP/bin/php/php{version}/conf"
+    target_dir = f"{php_dir}/conf"
     os.makedirs(target_dir, exist_ok=True)
     
     # 1. Generate pear.conf
@@ -79,26 +130,7 @@ extension=pdo_pgsql.so
 ;extension=yaml.so
 ;extension=uploadprogress.so"""
 
-    new_ext_block_ini = """;extension=apcu.so
-;extension=igbinary.so
-;extension=imagick.so
-;extension=memcached.so
-;extension=oauth.so
-;extension=redis.so
-;extension=tidy.so
-
-;extension=imap.so
-extension=pgsql.so
-extension=pdo_pgsql.so
-
-;extension=mcrypt.so
-;extension=ssh2.so
-;extension=yaml.so
-;extension=uploadprogress.so
-;extension=sysvsem.so
-;extension=sysvshm.so
-;extension=sysvmsg.so
-;extension=shmop.so"""
+    new_ext_block_ini = build_ini_ext_block(version, ext_hash)
 
     # For PHP 8.5.x and 8.6.x opcache is static, so we comment out its loading in php.ini
     if version.startswith("8.5.") or version.startswith("8.6."):
@@ -137,26 +169,7 @@ MAMP_Redis_MAMPextension=redis.so
 ;extension=uploadprogress.so
 ;extension=yaml.so"""
 
-    new_ext_block_temp = """MAMP_apc_MAMPextension=apcu.so
-MAMP_Igbinary_MAMPextension=igbinary.so
-MAMP_Imagick_MAMPextension=imagick.so
-MAMP_Memcached_MAMPextension=memcached.so
-MAMP_Oauth_MAMPextension=oauth.so
-MAMP_Redis_MAMPextension=redis.so
-MAMP_Tidy_MAMPextension=tidy.so
-
-;extension=imap.so
-extension=pgsql.so
-extension=pdo_pgsql.so
-
-;extension=mcrypt.so
-;extension=ssh2.so
-;extension=yaml.so
-;extension=uploadprogress.so
-;extension=sysvsem.so
-;extension=sysvshm.so
-;extension=sysvmsg.so
-;extension=shmop.so"""
+    new_ext_block_temp = build_temp_ext_block(version, ext_hash)
 
     if version.startswith("8.5.") or version.startswith("8.6."):
         new_php_ini_temp = new_php_ini_temp.replace(

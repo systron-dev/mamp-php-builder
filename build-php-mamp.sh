@@ -4,10 +4,11 @@
 # PREREQUISITE: OpenSSL 3.x must be built from source and installed into
 #   /Applications/MAMP/Library before running this script.
 #   (MAMP ships OpenSSL 1.0.2u which is too old for PHP 8.3+)
-# Usage: bash build-php-mamp.sh 8.2.31
-#         bash build-php-mamp.sh 8.3.31
-#         bash build-php-mamp.sh 8.4.21
-#         bash build-php-mamp.sh 8.5.6
+# Usage: bash build-php-mamp.sh 8.2.35
+#         bash build-php-mamp.sh 8.3.36
+#         bash build-php-mamp.sh 8.4.27
+#         bash build-php-mamp.sh 8.5.12
+#         bash build-php-mamp.sh 8.6.0RC4
 # PHP 8.5 notes: --enable-opcache removed (opcache always static); comment out
 #   zend_extension=opcache.so in php.ini. Run build-mamp-ext.sh ext85 for extensions.
 
@@ -16,7 +17,7 @@ VERSION="$1"
 # Source version keeps any RC/beta suffix (tarball and build dir); the install dir
 # must be numeric-only. MAMP Pro only lists dirs matching
 #   ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
-# so installing 8.6.0RC3 as php8.6.0RC3 leaves the build invisible in the GUI.
+# so installing 8.6.0RC4 as php8.6.0RC4 leaves the build invisible in the GUI.
 INSTALL_VERSION=$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
 ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
 MAMP=/Applications/MAMP/Library

@@ -4,8 +4,8 @@ set -e
 MAMP="/Applications/MAMP/Library"
 BUILD="/tmp/php-build-${USER:-mamp}"
 START_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSIONS=("8.2.34" "8.3.35" "8.4.26" "8.5.11" "8.6.0RC3")
-# Optional: pass versions as arguments to build a subset, e.g. `./compile-all-php.sh 8.6.0RC3`
+VERSIONS=("8.2.35" "8.3.36" "8.4.27" "8.5.12" "8.6.0RC4")
+# Optional: pass versions as arguments to build a subset, e.g. `./compile-all-php.sh 8.6.0RC4`
 if [ $# -gt 0 ]; then
   VERSIONS=("$@")
 fi
@@ -23,7 +23,7 @@ echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
 
 for version in "${VERSIONS[@]}"; do
   # MAMP Pro discovers versions via regex ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
-  # so RC/beta builds install into the numeric-only dir (8.6.0RC3 -> php8.6.0).
+  # so RC/beta builds install into the numeric-only dir (8.6.0RC4 -> php8.6.0).
   install_version=$(printf '%s' "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
   echo "=================================================="
   echo "==> Configuring PHP $version (install dir: php${install_version})"
@@ -31,10 +31,10 @@ for version in "${VERSIONS[@]}"; do
   cd "$START_DIR"
   bash build-php-mamp.sh "$version"
 
-  # Apply ICU make patch for PHP 8.3
-  if [ "$version" = "8.3.35" ]; then
-    echo "==> Applying ICU Makefile patch for PHP 8.3.35"
-    python3 -c "import re; f='${BUILD}/php-8.3.35/Makefile'; c=open(f).read(); open(f,'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))"
+  # Apply ICU make patch for PHP 8.3 (all 8.3.x point releases)
+  if [[ "$version" == 8.3.* ]]; then
+    echo "==> Applying ICU Makefile patch for PHP $version"
+    python3 -c "import re; f='${BUILD}/php-${version}/Makefile'; c=open(f).read(); open(f,'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))"
   fi
 
   echo "==> Hiding OpenSSL dylibs for static compilation"

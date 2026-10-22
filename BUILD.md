@@ -4,7 +4,7 @@ MAMP PRO v6.9 no longer ships newer PHP packages — updates are v7.x-only. This
 
 **Minimum OS:** macOS 12.0 (Monterey). Every artifact is compiled with `MACOSX_DEPLOYMENT_TARGET=12.0`, so the result runs on macOS 12 and newer. The SDK used to compile is newer (27.0 on the machine used for these builds) — SDK version is not the runtime requirement.
 
-**Tested with:** PHP 8.2.34, PHP 8.3.35, PHP 8.4.26, PHP 8.5.11, PHP 8.6.0RC3 on MAMP v6.9, macOS 12 (Monterey) and newer (arm64 and x86_64); built on macOS 27.0.1 / SDK 27.0 (arm64 host)
+**Target versions (rebuild required):** PHP 8.2.35, PHP 8.3.36, PHP 8.4.27, PHP 8.5.12, PHP 8.6.0RC4 on MAMP v6.9, macOS 12 (Monterey) and newer (arm64 and x86_64); built on macOS 27.0.1 / SDK 27.0 (arm64 host)
 
 ### Environment variables
 
@@ -24,7 +24,7 @@ All commands below use these variables.
 1. [Overview](#overview)
 2. [Prerequisites](#prerequisites)
 3. [Step 0 — Build OpenSSL 3](#step-0--build-openssl-3)
-4. [Step 1 — Rebuild libcurl](#step-1--rebuild-libcurl)
+4. [Step 1 — Modernize MAMP's shared libraries](#step-1--modernize-mamps-shared-libraries)
 5. [Step 2 — Build PHP](#step-2--build-php)
 6. [Step 3 — Build PHP Extensions](#step-3--build-php-extensions)
 7. [Step 4 — Install Conf Files](#step-4--install-conf-files)
@@ -45,24 +45,26 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 ```
 /Applications/MAMP/Library/          MAMP's own lib/include/bin (MAMPLIB)
 /Applications/MAMP/bin/php/          PHP installations
-  php8.2.34/
+  php8.2.35/
     bin/php, phpize, php-config
     conf/php.ini, pear.conf, php.ini.temp
     lib/php/extensions/no-debug-non-zts-20220829/
-  php8.3.35/
+  php8.3.36/
     ...extensions/no-debug-non-zts-20230831/
-  php8.4.26/
+  php8.4.27/
     ...extensions/no-debug-non-zts-20240924/
-  php8.5.11/
+  php8.5.12/
     ...extensions/no-debug-non-zts-20250925/
-  php8.6.0/                    (PHP 8.6.0RC3 — pre-releases install under numeric name)
+  php8.6.0/                    (PHP 8.6.0RC4 — pre-releases install under numeric name)
     ...extensions/no-debug-non-zts-20260924/
 /tmp/php-build-${USER:-mamp}/         build workspace ($BUILD)
   build-php-mamp.sh                  PHP configure script
-  build-curl-mamp.sh                 libcurl rebuild script
   build-mamp-ext.sh                  extension build script
+  build-zlib-mamp.sh                 zlib upgrade script
+  build-deps-mamp.sh                 phase A library modernization script
   ext-deps/                          static C libs for extensions
   ext-src/                           unpacked extension source trees
+  deps-phase-a/                      phase A sources, staging, backups
 ```
 
 ### PHP API extension dir hashes
@@ -77,6 +79,17 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 
 ---
 
+## Security baseline
+
+The current target set is the 2026-10-21 security release. All of
+`8.2.35`, `8.3.36`, `8.4.27`, `8.5.12` and `8.6.0RC4` contain the fixes for:
+
+- **[CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618)** — OOM corruption in mod_php/FPM
+- **[CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619)** — stale global state
+
+Both are CVSS v4.0 9.2. Upstream confirmation: the `NEWS` file in each php-src tag lists
+the CVEs (`php-8.6.0RC3` does not). Do not package older 8.2–8.6 targets.
+
 ## Prerequisites
 
 ### macOS version
@@ -87,11 +100,13 @@ macOS 12.0 (Monterey) or newer, on Apple Silicon (arm64) or Intel (x86_64). The 
 xcode-select --install
 ```
 
-### MacPorts (Recommended Building Basis)
-MacPorts is the recommended package manager and provides the best environment/basis for compiling these dependencies. Install the required libraries with:
+### MacPorts (build-time tools only)
+MacPorts supplies the build tools. No MacPorts library is linked into the result.
 ```bash
-sudo port install pkgconfig autoconf automake libtool openssl3 libxml2 curl zlib bzip2 libiconv pcre2 libjpeg-turbo libpng freetype webp icu libsodium libmcrypt oniguruma5 libzip
+sudo port install pkgconfig autoconf libtool gettext wget git
 ```
+`cmake` is bootstrapped automatically into `$BUILD/cmake-bin` when missing. All linked
+libraries are shipped by MAMP or built from source by the scripts in this repo.
 
 It is also used to supply a modern `config.sub`/`config.guess` when building libmcrypt:
 ```bash
@@ -103,17 +118,17 @@ ls /opt/local/share/libtool/build-aux/config.sub
 ```bash
 mkdir -p "$BUILD"
 cd "$BUILD"
-curl -LO https://www.php.net/distributions/php-8.2.34.tar.gz
-curl -LO https://www.php.net/distributions/php-8.3.35.tar.gz
-curl -LO https://www.php.net/distributions/php-8.4.26.tar.gz
-curl -LO https://www.php.net/distributions/php-8.5.11.tar.gz
-# For pre-releases / RCs (e.g. PHP 8.6.0RC3 from QA or GitHub php-src):
-# curl -LO https://downloads.php.net/~svpernova09/php-8.6.0RC3.tar.gz
-tar xzf php-8.2.34.tar.gz
-tar xzf php-8.3.35.tar.gz
-tar xzf php-8.4.26.tar.gz
-tar xzf php-8.5.11.tar.gz
-# tar xzf php-8.6.0RC3.tar.gz
+curl -LO https://www.php.net/distributions/php-8.2.35.tar.gz
+curl -LO https://www.php.net/distributions/php-8.3.36.tar.gz
+curl -LO https://www.php.net/distributions/php-8.4.27.tar.gz
+curl -LO https://www.php.net/distributions/php-8.5.12.tar.gz
+# For pre-releases / RCs (e.g. PHP 8.6.0RC4 from QA or GitHub php-src):
+# curl -LO https://downloads.php.net/~mbeccati/php-8.6.0RC4.tar.gz
+tar xzf php-8.2.35.tar.gz
+tar xzf php-8.3.36.tar.gz
+tar xzf php-8.4.27.tar.gz
+tar xzf php-8.5.12.tar.gz
+# tar xzf php-8.6.0RC4.tar.gz
 # Note: build-php-mamp.sh automatically handles downloading/extracting 8.6 pre-releases if not present.
 ```
 
@@ -121,27 +136,36 @@ tar xzf php-8.5.11.tar.gz
 
 ## Step 0 — Build OpenSSL 3
 
-MAMP ships OpenSSL 1.0.2u — too old for PHP 8.3+. Build OpenSSL 3.x static libs into MAMP Library.
+MAMP ships OpenSSL 1.0.2u — too old for PHP 8.3+. Build OpenSSL 3.6.5 static libs into MAMP Library.
+
+The supported path is `build-deps-mamp.sh openssl`, which downloads, checksum-verifies, and
+installs the static libraries and headers without touching MAMP's dynamic 1.0.0 libraries:
+
+```bash
+bash build-deps-mamp.sh openssl
+```
+
+Manual equivalent:
 
 ```bash
 cd "$BUILD"
-curl -LO https://www.openssl.org/source/openssl-3.3.2.tar.gz
-tar xzf openssl-3.3.2.tar.gz
-cd openssl-3.3.2
+curl -LO https://www.openssl.org/source/openssl-3.6.5.tar.gz
+tar xzf openssl-3.6.5.tar.gz
+cd openssl-3.6.5
 
-./Configure no-shared \
+./Configure no-shared no-tests \
   --prefix=/Applications/MAMP/Library \
-  --openssldir=/Applications/MAMP/Library \
+  --openssldir=/Applications/MAMP/Library/openssl \
   darwin64-${ARCH}-cc     # arm64 → darwin64-arm64-cc | x86_64 → darwin64-x86_64-cc
 
-make -j$(sysctl -n hw.ncpu)
-make install_sw    # installs libs + headers only, not man pages
+make -j$(sysctl -n hw.ncpu) build_libs
+# install libssl.a / libcrypto.a + include/openssl only
 ```
 
 Verify:
 ```bash
 grep OPENSSL_VERSION_TEXT /Applications/MAMP/Library/include/openssl/opensslv.h
-# should say OpenSSL 3.x.x
+# should say OpenSSL 3.6.5
 ls /Applications/MAMP/Library/lib/libssl.a   # must exist
 ```
 
@@ -149,20 +173,29 @@ ls /Applications/MAMP/Library/lib/libssl.a   # must exist
 
 ---
 
-## Step 1 — Rebuild libcurl
+## Step 1 — Modernize MAMP's shared libraries
 
-MAMP's bundled libcurl 7.68.0 was built against OpenSSL 1.0.2u. Rebuild against OpenSSL 3.
+MAMP's bundled libraries are partly from 2016. Phase A upgrades the ABI-compatible set:
 
 ```bash
-bash "$BUILD/build-curl-mamp.sh" 8.7.1
+bash build-zlib-mamp.sh          # zlib 1.3.2
+bash build-deps-mamp.sh all      # OpenSSL 3.6.5, nghttp2 1.70, curl 8.23, libpng 1.6.59,
+                                 # freetype 2.15, libzip 1.12, tidy 5.8, libsodium 1.0.22,
+                                 # webp 1.6, oniguruma 6.9.10
 ```
 
-**What it does:**
-- Downloads curl 8.7.1 source
-- Hides `libssl.dylib`/`libcrypto.dylib` symlinks temporarily
-- Builds and installs `libcurl.4.dylib` into `/Applications/MAMP/Library/`
-- Backs up original to `libcurl.4.dylib.bak`
-- Verifies no OpenSSL dylib dependencies remain (fully static-embedded)
+Each library is downloaded from its upstream release, verified against the MacPorts
+portfile SHA-256, built with `-mmacosx-version-min=12.0`, staged, then installed into
+`/Applications/MAMP/Library` with the previous files moved to
+`$BUILD/deps-phase-a/backup`.
+
+`libxslt` is intentionally deferred: 1.1.45 requires libxml2 ≥ 2.15.1, and libxml2 ≥ 2.12
+breaks PHP 5.6/7.4. It belongs to phase B together with ICU 78, readline 8.3,
+libjpeg-turbo and OpenLDAP 2.6.
+
+> **Important:** after this step, rebuild PHP (`./compile-all-php.sh`). The libsodium
+> soname changes from 23 to 26 and old PHP binaries will not start until rebuilt. A
+> `libsodium.23.dylib` symlink is kept so the legacy `php7.4.33` install still runs.
 
 ---
 
@@ -171,15 +204,15 @@ bash "$BUILD/build-curl-mamp.sh" 8.7.1
 ### Run configure
 
 ```bash
-bash "$BUILD/build-php-mamp.sh" 8.2.34
+bash "$BUILD/build-php-mamp.sh" 8.2.35
 # or
-bash "$BUILD/build-php-mamp.sh" 8.3.35
+bash "$BUILD/build-php-mamp.sh" 8.3.36
 # or
-bash "$BUILD/build-php-mamp.sh" 8.4.26
+bash "$BUILD/build-php-mamp.sh" 8.4.27
 # or
-bash "$BUILD/build-php-mamp.sh" 8.5.11
+bash "$BUILD/build-php-mamp.sh" 8.5.12
 # or (for RC / pre-releases)
-bash "$BUILD/build-php-mamp.sh" 8.6.0RC3
+bash "$BUILD/build-php-mamp.sh" 8.6.0RC4
 ```
 
 The script runs `./configure` only — it does **not** run `make`.
@@ -189,7 +222,7 @@ The script runs `./configure` only — it does **not** run `make`.
 MAMP Pro discovers PHP versions by matching the install path against
 `^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$` — the patch component
 must be digits only, with no suffix. A pre-release therefore installs under its numeric
-name: `8.6.0RC3` → `php8.6.0`. Installing as `php8.6.0RC3` leaves it invisible in the
+name: `8.6.0RC4` → `php8.6.0`. Installing as `php8.6.0RC4` leaves it invisible in the
 MAMP Pro GUI even though the binary works from the command line.
 
 `build-php-mamp.sh` and `compile-all-php.sh` strip the suffix automatically for the
@@ -203,8 +236,8 @@ the CLI loading no `php.ini`.
 
 ```bash
 cd /Applications/MAMP/bin/php
-mv php8.6.0RC3 php8.6.0
-ln -sfn php8.6.0 php8.6.0RC3          # keeps the baked-in paths resolvable
+mv php8.6.0RC4 php8.6.0
+ln -sfn php8.6.0 php8.6.0RC4          # keeps the baked-in paths resolvable
 cd php8.6.0
 for f in bin/phpize bin/php-config include/php/main/build-defs.h \
          include/php/main/php_version.h php/man/man1/*.1 \
@@ -237,7 +270,7 @@ MAMP has ICU 56 with versioned symbols (`u_sprintf_56` in `libicuio`). PHP 8.3 n
 # PHP 8.3 only:
 python3 -c "
 import re
-f = '${BUILD}/php-8.3.35/Makefile'
+f = '${BUILD}/php-8.3.36/Makefile'
 c = open(f).read()
 open(f, 'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MULTILINE))
 "
@@ -246,7 +279,7 @@ open(f, 'w').write(re.sub(r'^(EXTRA_LIBS = .+)$', r'\1 -licuio', c, flags=re.MUL
 ### Run make
 
 ```bash
-cd "$BUILD/php-8.3.35"    # or php-8.4.26
+cd "$BUILD/php-8.3.36"    # or php-8.4.27
 
 MAMP=/Applications/MAMP/Library
 mv $MAMP/lib/libssl.dylib $MAMP/lib/libssl.dylib.hidden
@@ -270,12 +303,12 @@ MAMP GUI requires the Apache PHP module (`libphp.so`) to be located inside each 
 
 ```bash
 # 1. Create the modules folder inside the PHP directory and copy it
-mkdir -p /Applications/MAMP/bin/php/php8.3.35/modules
-cp "$BUILD/php-8.3.35/libs/libphp.so" /Applications/MAMP/bin/php/php8.3.35/modules/libphp.so
-codesign --force --sign - /Applications/MAMP/bin/php/php8.3.35/modules/libphp.so
+mkdir -p /Applications/MAMP/bin/php/php8.3.36/modules
+cp "$BUILD/php-8.3.36/libs/libphp.so" /Applications/MAMP/bin/php/php8.3.36/modules/libphp.so
+codesign --force --sign - /Applications/MAMP/bin/php/php8.3.36/modules/libphp.so
 
 # 2. Also copy to MAMP's global Apache modules directory as a fallback
-cp "$BUILD/php-8.3.35/libs/libphp.so" /Applications/MAMP/Library/modules/libphp.so
+cp "$BUILD/php-8.3.36/libs/libphp.so" /Applications/MAMP/Library/modules/libphp.so
 codesign --force --sign - /Applications/MAMP/Library/modules/libphp.so
 ```
 
@@ -293,12 +326,13 @@ Or build phases separately:
 
 ```bash
 bash "$BUILD/build-mamp-ext.sh" deps    # C libraries only
-bash "$BUILD/build-mamp-ext.sh" ext     # PECL extensions for 8.2 + 8.3 + 8.4
-bash "$BUILD/build-mamp-ext.sh" ext85   # PECL extensions for 8.5 only
+bash "$BUILD/build-mamp-ext.sh" ext     # PECL extensions for 8.2 + 8.3 + 8.4 + 8.5
 bash "$BUILD/build-mamp-ext.sh" ext86   # PECL extensions for 8.6 only
 ```
 
-> **PHP 8.5 note:** Run `ext85` separately after placing compat shims (see [PHP 8.5 gotchas](#php-85-gotchas) below).
+`ext85` is retained for historical 8.5-only rebuilds; `ext` now applies the same
+8.5-compatible extension versions (xdebug 3.5.3, oauth 2.0.10, memcached 3.4.0) to all
+of 8.2–8.5.
 
 Or individual targets:
 
@@ -322,37 +356,46 @@ bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 | libpng               | 1.6.43   |                                                  |
 | libtiff              | 4.6.0    |                                                  |
 | libwebp              | 1.4.0    |                                                  |
+| jbigkit              | 2.2      | ImageMagick JBIG delegate                         |
+| brotli               | 1.2.1    | libjxl dependency                                 |
+| highway              | 1.4.0    | libjxl dependency                                 |
+| libjxl               | 0.12.0   | JPEG XL; skcms vendored into third_party          |
+| djvulibre            | 3.5.30   | ImageMagick DjVu delegate                         |
 | freetype             | 2.13.2   |                                                  |
 | ImageMagick          | 7.1.1-33 | Depends on all image libs above                  |
 | libyaz               | 5.34.0   | **SKIPPED** — libxml2/libxslt dep issues         |
 
 ### PHP extensions built
 
-| Extension      | 8.2.34 | 8.3.35 | 8.4.26 | 8.5.11  | 8.6.0   | Notes                                              |
+| Extension      | 8.2.35 | 8.3.36 | 8.4.27 | 8.5.12  | 8.6.0   | Notes                                              |
 |----------------|--------|--------|--------|---------|---------|----------------------------------------------------|
-| apcu           | ✓      | ✓      | ✓      | ✓       | ✗       | 8.6 requires internal API updates (e.g. zval_dtor) |
-| igbinary       | ✓      | ✓      | ✓      | ✓       | ✓       | Header installed to PHP include dirs               |
-| imagick        | ✓      | ✓      | ✓      | ✓       | ✗       | `php_strtolower` removed in 8.4; 8.6 compatibility |
-| mcrypt         | ✓      | ✓      | ✓      | ✓       | ✗       | `php_rand.h` shim needed                           |
-| memcached      | ✓      | ✓      | ✓      | ✓ 3.4.0 | ✗       | Use v3.4.0 for PHP 8.5                             |
-| oauth          | ✓      | ✓      | ✓      | ✓ 2.0.10| ✗       | Use v2.0.10 for PHP 8.5                            |
-| redis          | ✓      | ✓      | ✓      | ✓       | ✗       | Built with igbinary support                        |
-| ssh2           | ✓      | ✓      | ✓      | ✓       | ✓       | OpenSSL static symbols needed in `LIBS`            |
-| tidy           | ✓      | ✓      | ✓      | ✓       | ✓       | Pre-existing in MAMP                               |
-| uploadprogress | ✓      | ✓      | ✓      | ✓       | ✗       |                                                    |
-| xdebug         | ✓      | ✓      | ✓      | ✓ 3.5.1 | ✗       | 3.5.x rejects PHP ≥ 8.6.0                          |
-| yaml           | ✓      | ✓      | ✓      | ✓       | ✗       |                                                    |
+| apcu           | ✓      | ✓      | ✓      | ✓       | ✓       | 8.6: `php_verror()` patch + compat header          |
+| igbinary       | ✓      | ✓      | ✓      | ✓       | ✓       | Builds on 8.6 with compat header                   |
+| imagick        | ✓      | ✓      | ✓      | ✓       | ✓       | All delegates bundled: jbig, jxl, djvu, png, tiff, webp, freetype |
+| mcrypt         | ✓      | ✓      | ✓      | ✓       | ✓       | 8.6: 1.0.9, stream filters removed, `php_rand.h` shim |
+| memcached      | ✓ 3.4.0| ✓ 3.4.0| ✓ 3.4.0| ✓ 3.4.0 | ✓ 3.4.0 | 8.6 builds with compat header                      |
+| oauth          | ✓ 2.0.10| ✓ 2.0.10| ✓ 2.0.10| ✓ 2.0.10| ✓ 2.0.10| 8.6: `XtOffsetOf` → `offsetof` patch              |
+| redis          | ✓      | ✓      | ✓      | ✓       | ✓ 6.3.0 | 8.6: session handlers patched for `zend_string*` args; no igbinary |
+| ssh2           | ✓      | ✓      | ✓      | ✓       | ✓       | OpenSSL static symbols; 1.5.0 needs PHP 8.6 API patch            |
+| tidy           | ✓      | ✓      | ✓      | ✓       | ✓       | Built shared by the PHP core configure             |
+| uploadprogress | ✓      | ✓      | ✓      | ✓       | ✓       | Builds on 8.6 with compat header                   |
+| xdebug         | ✓ 3.5.3| ✓ 3.5.3| ✓ 3.5.3| ✓ 3.5.3 | ✓ 3.5.3 | 8.6: version gates widened + profiler patch; disabled by default |
+| yaml           | ✓      | ✓      | ✓      | ✓       | ✓       | Builds on 8.6 with compat header                   |
 | opcache        | ✓      | ✓      | ✓      | static  | static  | Built into PHP 8.5+ & 8.6 — no .so; comment out ini|
 | pgsql          | ✓      | ✓      | ✓      | ✓       | ✓       | Needs `LIBS="-lpq -lssl -lcrypto -lz"`             |
 | pdo_pgsql      | ✓      | ✓      | ✓      | ✓       | ✓       | Same as pgsql                                      |
-| sysvsem        | ✓      | ✓      | ✓      | ✓       | ✓       | System V semaphores; disabled by default           |
-| sysvshm        | ✓      | ✓      | ✓      | ✓       | ✓       | System V shared memory; disabled by default        |
-| sysvmsg        | ✓      | ✓      | ✓      | ✓       | ✓       | System V message queues; disabled by default       |
-| shmop          | ✓      | ✓      | ✓      | ✓       | ✓       | POSIX shared memory ops; disabled by default       |
+| sysvsem        | ✓      | ✓      | ✓      | ✓       | ✓       | System V semaphores; enabled by default            |
+| sysvshm        | ✓      | ✓      | ✓      | ✓       | ✓       | System V shared memory; enabled by default         |
+| sysvmsg        | ✓      | ✓      | ✓      | ✓       | ✓       | System V message queues; enabled by default        |
+| shmop          | ✓      | ✓      | ✓      | ✓       | ✓       | POSIX shared memory ops; enabled by default        |
 
 **Not built:**
-- `imap` — no libc-client available; commented in php.ini
+- `imap` — deliberately skipped: removed from core in 8.4; c-client 2007f is unmaintained and unsafe
 - `yaz` — libyaz build fails on libxml2/libxslt deps; low priority
+
+`configure-mamp-ini.py` uncomments every `extension=` line whose `.so` exists. The only
+exception is **xdebug**: its `zend_extension` line stays commented out by default because
+loading it on every CLI call is slow. Uncomment it in `conf/php.ini` when debugging.
 
 ---
 
@@ -396,7 +439,7 @@ If you wish to configure files manually or understand the underlying logic:
 
 **Commented out** (available, enable manually):
 ```ini
-;extension=imap.so          ; not built — no libc-client
+;extension=imap.so          ; not built — c-client 2007f unmaintained (security)
 ;extension=mcrypt.so        ; not in MAMP reference defaults
 ;extension=ssh2.so          ; not in MAMP reference defaults
 ;extension=uploadprogress.so; disabled in MAMP reference
@@ -430,13 +473,13 @@ with open('/Applications/MAMP/bin/php/php8.2.0/conf/pear.conf') as f:
     base = f.read()
 
 # Same API hash (same minor version):
-result = update_pear_conf(base, 'php8.2.0', 'php8.2.34')
+result = update_pear_conf(base, 'php8.2.0', 'php8.2.35')
 
 # Different API hash (new minor/major):
-# result = update_pear_conf(base, 'php8.2.0', 'php8.3.35',
+# result = update_pear_conf(base, 'php8.2.0', 'php8.3.36',
 #     'no-debug-non-zts-20220829', 'no-debug-non-zts-20230831')
 
-with open('/Applications/MAMP/bin/php/php8.3.35/conf/pear.conf', 'w') as f:
+with open('/Applications/MAMP/bin/php/php8.3.36/conf/pear.conf', 'w') as f:
     f.write(result)
 ```
 
@@ -449,13 +492,13 @@ with open('/Applications/MAMP/bin/php/php8.2.0/conf/php.ini.temp') as f:
     base = f.read()
 
 # Same API hash:
-result = base.replace('php8.2.0', 'php8.2.34')
+result = base.replace('php8.2.0', 'php8.2.35')
 
 # Different API hash:
-# result = base.replace('php8.2.0', 'php8.3.35') \
+# result = base.replace('php8.2.0', 'php8.3.36') \
 #              .replace('no-debug-non-zts-20220829', 'no-debug-non-zts-20230831')
 
-with open('/Applications/MAMP/bin/php/php8.3.35/conf/php.ini.temp', 'w') as f:
+with open('/Applications/MAMP/bin/php/php8.3.36/conf/php.ini.temp', 'w') as f:
     f.write(result)
 ```
 
@@ -470,24 +513,24 @@ The last line of `php.ini.temp` must read:
 
 ```bash
 # Check PHP binary
-/Applications/MAMP/bin/php/php8.3.35/bin/php -v
+/Applications/MAMP/bin/php/php8.3.36/bin/php -v
 
 # Check loaded extensions
-/Applications/MAMP/bin/php/php8.3.35/bin/php -m
+/Applications/MAMP/bin/php/php8.3.36/bin/php -m
 
 # Check no external dylib deps (should only show MAMP + system libs)
-otool -L /Applications/MAMP/bin/php/php8.3.35/bin/php | grep -v MAMP | grep -v /usr/lib | grep -v /System
+otool -L /Applications/MAMP/bin/php/php8.3.36/bin/php | grep -v MAMP | grep -v /usr/lib | grep -v /System
 
 # Verify OpenSSL version used
-/Applications/MAMP/bin/php/php8.3.35/bin/php -r "echo openssl_get_cipher_methods()[0];"
-/Applications/MAMP/bin/php/php8.3.35/bin/php -r "phpinfo();" | grep -i openssl
+/Applications/MAMP/bin/php/php8.3.36/bin/php -r "echo openssl_get_cipher_methods()[0];"
+/Applications/MAMP/bin/php/php8.3.36/bin/php -r "phpinfo();" | grep -i openssl
 
 # Verify the runtime floor (minos = minimum OS required; sdk = SDK used to compile)
-otool -l /Applications/MAMP/bin/php/php8.3.35/bin/php | grep -A4 LC_BUILD_VERSION
+otool -l /Applications/MAMP/bin/php/php8.3.36/bin/php | grep -A4 LC_BUILD_VERSION
 # expect: platform 1 / minos 12.0 / sdk <host SDK>
 
 # Same check across every bundled extension
-for so in /Applications/MAMP/bin/php/php8.3.35/lib/php/extensions/*/*.so; do
+for so in /Applications/MAMP/bin/php/php8.3.36/lib/php/extensions/*/*.so; do
   printf "%-25s %s\n" "$(basename "$so")" \
     "$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
 done
@@ -633,7 +676,7 @@ OPcache still works and all `opcache.*` ini settings apply.
 `ext/standard/php_smart_string.h` was removed; functionality moved to `Zend/zend_smart_string.h`. Create a compat shim before building extensions (affects igbinary, oauth, redis, yaml, memcached, imagick):
 
 ```bash
-cat > /Applications/MAMP/bin/php/php8.5.11/include/php/ext/standard/php_smart_string.h << 'EOF'
+cat > /Applications/MAMP/bin/php/php8.5.12/include/php/ext/standard/php_smart_string.h << 'EOF'
 #pragma once
 #include "Zend/zend_smart_string.h"
 EOF
@@ -646,7 +689,7 @@ EOF
 `ext/standard/php_random.h` moved to `ext/random/php_random.h`. The `php_rand.h` shim for mcrypt must point to the new location:
 
 ```bash
-cat > /Applications/MAMP/bin/php/php8.5.11/include/php/ext/standard/php_rand.h << 'EOF'
+cat > /Applications/MAMP/bin/php/php8.5.12/include/php/ext/standard/php_rand.h << 'EOF'
 #pragma once
 #include "ext/random/php_random.h"
 EOF
@@ -654,17 +697,19 @@ EOF
 
 `build-mamp-ext.sh` creates this automatically via `build_mcrypt_ext_85`.
 
-### Extension versions that require upgrading for PHP 8.5
+### Extension versions
 
-`zend_exception_get_default()` was removed; use `zend_ce_exception` directly. Older extension versions that call the removed function fail to compile:
+`zend_exception_get_default()` was removed in PHP 8.5; extensions calling it fail to compile.
+Current pins used for every PHP 8.2–8.5 build:
 
-| Extension  | Version for 8.3/8.4 | Version for 8.5 |
-|------------|---------------------|-----------------|
-| xdebug     | 3.4.3               | **3.5.1**       |
-| oauth      | 2.0.9               | **2.0.10**      |
-| memcached  | 3.3.0               | **3.4.0**       |
+| Extension  | Version |
+|------------|---------|
+| xdebug     | 3.5.3   |
+| oauth      | 2.0.10  |
+| memcached  | 3.4.0   |
 
-`build-mamp-ext.sh` uses the correct version automatically when building for PHP 8.5 via `ext85`.
+`build-mamp-ext.sh` applies these automatically. xdebug 3.5.x refuses PHP ≥ 8.6, so `ext86`
+skips it.
 
 ---
 
@@ -703,11 +748,24 @@ Run extension compilation for PHP 8.6 using:
 ```bash
 bash "$BUILD/build-mamp-ext.sh" ext86
 ```
-Several upstream PECL extensions do not yet have official releases supporting PHP 8.6:
-- `xdebug` explicitly rejects PHP `>= 8.6.0` during configure (`PHP 8.6 is not supported`).
-- `apcu` requires source adjustments for removed/changed internal APIs (e.g. `zval_dtor`).
-- `imagick`, `memcached`, `oauth`, `redis`, `uploadprogress`, `yaml`, and `mcrypt` currently encounter build or internal API incompatibility errors upstream for 8.6.
-- `igbinary`, `ssh2`, `pgsql`, `pdo_pgsql`, `tidy`, and System V IPC extensions compile cleanly.
+PHP 8.6 removed several internal macros and changed session-handler signatures. The script
+handles this with `php86-compat.h` (force-included) plus targeted patches:
+
+- **Compat header**: `XtOffsetOf`, `zval_dtor`, `zval_is_true`, `INI_STR/INT/FLT/BOOL`,
+  `WRONG_PARAM_COUNT`, `php_hash_bin2hex`.
+- `xdebug` 3.5.3: both configure version gates widened and `ZSTR_INIT_LITERAL(tmp_name, …)`
+  replaced; loads normally, disabled by default.
+- `ssh2` 1.5.0: `zval_is_true`/`zval_dtor` replacements.
+- `oauth` 2.0.10: `XtOffsetOf` → `offsetof`.
+- `apcu` 5.1.24: `php_verror()` signature.
+- `mcrypt` 1.0.9: stream-filter code dropped (no `mcrypt.*` filters on 8.6).
+- `redis` 6.3.0: session handlers adapted to `zend_string*`; built without igbinary.
+- `igbinary`, `uploadprogress`, `yaml`, `memcached`, `imagick`, `pgsql`, `pdo_pgsql`,
+  `tidy`, and the System V IPC extensions all build and load.
+
+`imap` is deliberately **not** built: PHP removed it from core in 8.4, and the PECL package
+requires UW `c-client` 2007f — unmaintained since 2007, with known parser CVEs and a
+non-standard license.
 
 ---
 
@@ -734,7 +792,7 @@ Do not specify `-isystem /Library/Developer/CommandLineTools/.../c++/v1` inside 
 
 Apple's clang stamps each binary with two versions: `minos` (minimum OS the binary will load on) and `sdk` (the SDK it was compiled against). `sdk` is taken from the build host (27.0 on the machine these artifacts were built on) and is not a runtime requirement — `minos` is. If you build without setting a deployment target, `minos` defaults to the host OS, and a binary linking modern system symbols (e.g. `strchrnul`, introduced in macOS 15.4) crashes immediately with `dyld: Symbol not found` on anything older:
 
-* **Fix:** target the oldest OS you intend to support. All four scripts (`build-php-mamp.sh`, `build-mamp-ext.sh`, `build-curl-mamp.sh`, `compile-all-php.sh`) already default to `12.0`, and read the variable when set:
+* **Fix:** target the oldest OS you intend to support. All build scripts (`build-php-mamp.sh`, `build-mamp-ext.sh`, `compile-all-php.sh`, `build-zlib-mamp.sh`, `build-deps-mamp.sh`) already default to `12.0`, and read the variable when set:
   ```bash
   export MACOSX_DEPLOYMENT_TARGET="12.0"   # Monterey — the default in these scripts
   ```

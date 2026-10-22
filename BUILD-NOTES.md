@@ -1,6 +1,6 @@
 ---
 name: mamp-php-build
-description: "PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11, 8.6.0RC3 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
+description: "PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, 8.6.0RC4 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
 metadata: 
   node_type: memory
   type: project
@@ -361,4 +361,88 @@ Target versions updated to latest upstream releases (released September 24, 2026
 3. **PECL extensions**: Configured `ext86` target and compatibility shims in `build-mamp-ext.sh`.
 4. **RC / QA download support**: Added automatic fallback to `qa.php.net` and GitHub tags in `build-php-mamp.sh` for pre-release versions.
 5. **Install dir naming for pre-releases**: MAMP Pro enumerates versions with `^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$`, so an RC suffix in the directory name (`php8.6.0RC3`) makes the build invisible in the GUI. The install prefix now strips the suffix (`8.6.0RC3` → `php8.6.0`) while the source tarball and build dir keep the full version string. The prefix is compiled into `bin/php` and `bin/php-cgi`, so retrofitting an older build by renaming its directory needs a compat symlink back to the old name — or a rebuild, which is the clean fix.
+
+---
+
+## PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, and 8.6.0RC4 Update (2026-10-22)
+
+Target versions updated to the 2026-10-21 security releases:
+- `php8.2.35` (`no-debug-non-zts-20220829`) — 8.2 reaches EOL on 2026-12-31
+- `php8.3.36` (`no-debug-non-zts-20230831`)
+- `php8.4.27` (`no-debug-non-zts-20240924`)
+- `php8.5.12` (`no-debug-non-zts-20250925`)
+- `php8.6.0` — PHP 8.6.0RC4, installed under the stripped numeric name (`no-debug-non-zts-20260924`)
+
+Security context: the four stable releases fix [CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618) (OOM corruption in mod_php/FPM)
+and [CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619) (stale global state), both CVSS v4.0 9.2. Verified against the php-src
+tags: `NEWS` in php-8.2.35, php-8.3.36, php-8.4.27, php-8.5.12 and php-8.6.0RC4 each lists
+both CVEs; php-8.6.0RC3 does not. Updating is the only complete
+mitigation. PHP 8.6.0RC4 is a QA build from `downloads.php.net/~mbeccati/` — no main
+`distributions/` tarball exists for RC releases.
+
+Script changes:
+1. `compile-all-php.sh` — version list bumped; the ICU `-licuio` Makefile patch now matches
+   any `8.3.*` target instead of a single hard-coded point release.
+2. `build-mamp-ext.sh` — installed PHP paths, bundled-extension source trees, and the
+   PHP 8.6 QA download URL (`~mbeccati`) updated.
+3. `configure-mamp-ini.py` — new version → extension API hash entries appended; historical
+   entries retained so older installs stay regenerable.
+4. Docs (`README.md`, `BUILD.md`, `AGENTS.md`) — active targets and commands updated.
+
+---
+
+## MAMP Library Modernization — Phase A (2026-10-22)
+
+MAMP's bundled libraries were partly 2016-era (libxml2 2.9.4, ICU 56.1, freetype 2.6.5).
+Phase A upgrades everything whose soname stays ABI-compatible, using `build-deps-mamp.sh`:
+
+| Library | Before | After |
+|---|---|---|
+| zlib | 1.2.11 | 1.3.2 |
+| OpenSSL (static) | 3.3.2 | 3.6.5 |
+| nghttp2 | 1.29.0 | 1.70.0 |
+| curl | 8.7.1 | 8.23.0 |
+| libpng | 1.6.37 | 1.6.59 |
+| freetype | 2.6.5 | 2.15.0 |
+| libzip | 1.8.0 | 1.12 |
+| tidy | 5.6.0 | 5.8.0 |
+| libsodium | 1.0.18 | 1.0.22 |
+| libwebp (ABI 0x0208) | ~1.2 | 1.6.0 |
+| oniguruma | 6.9.4 | 6.9.10 |
+
+Deferred: **libxslt 1.1.45** requires libxml2 ≥ 2.15.1. That is a phase B upgrade because
+libxml2 ≥ 2.12 breaks PHP 5.6/7.4; ICU 78.3, readline 8.3, libjpeg-turbo and OpenLDAP 2.6
+remain phase B for the same reason.
+
+Operational notes:
+1. **OpenSSL stays static.** MAMP's dynamic `libssl.1.0.0.dylib` is still used by MAMP's own
+   binaries; only `libssl.a`/`libcrypto.a` and headers are upgraded.
+2. **libsodium changed soname** 23 → 26. PHP must be rebuilt; `libsodium.23.dylib` is kept as
+   a symlink so legacy `php7.4.33` still starts.
+3. **tidy changed soname** to `libtidy.58`; `libtidy.5.dylib` is kept as a compat symlink.
+4. **pkgconfig directory is root-owned** (`ogeorgi`), so `build-deps-mamp.sh` installs into a
+   staging prefix and rsyncs everything except `pkgconfig`/`*.pc`.
+5. **Re-sign modules after copy.** `build-mamp-ext.sh` now codesigns the installed `.so`
+   files; signing only the build-tree bundle produced `CODESIGNING: Invalid Page` kills on
+   arm64 for PHP 8.6 modules.
+6. **PHP must be rebuilt** after this phase (`./compile-all-php.sh`) so binaries link the new
+   sonames. Verified with `php -r` across 8.2–8.6: zlib 1.3.2, curl 8.23.0, OpenSSL 3.6.5,
+   sodium 1.0.22, and zero `/opt/local` references.
+
+Final state after rebuild:
+
+- PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, 8.6.0RC4 all start and report the versions above.
+- 17 shared extensions load on 8.2–8.5 (`apcu`, `igbinary`, `imagick`, `memcached`, `mcrypt`,
+  `OAuth`, `redis`, `ssh2`, `tidy`, `uploadprogress`, `yaml`, `pgsql`, `pdo_pgsql`,
+  `sysvsem`, `sysvshm`, `sysvmsg`, `shmop`). `xdebug` is installed but disabled by default.
+- PHP 8.6 loads 18 shared extensions: `apcu`, `igbinary`, `imagick`, `mcrypt`, `memcached`, `OAuth`, `redis`, `ssh2`, `tidy`, `uploadprogress`, `yaml`, `pgsql`, `pdo_pgsql`, `sysvsem`, `sysvshm`, `sysvmsg`, `shmop`, plus `xdebug` (installed, disabled). Built via `php86-compat.h` plus targeted patches (ssh2 1.5.0, oauth `XtOffsetOf`, apcu `php_verror`, mcrypt stream-filter removal).
+- `redis` 6.3.0 works on 8.6 after patching its session handlers for the new `zend_string*` signatures (no igbinary serializer). `xdebug` 3.5.3 works after widening both configure version gates and replacing `ZSTR_INIT_LITERAL(tmp_name, …)`; it stays disabled by default.
+- `imap` is intentionally excluded: removed from PHP core in 8.4; PECL imap requires UW `c-client` 2007f (unmaintained, known parser CVEs, non-standard license). Do not add it to a distributable build.
+- `imagick.so` is fully self-contained with all image delegates bundled: jbigkit 2.2, libjxl 0.12.0 (brotli 1.2.1 + highway 1.4.0 + vendored skcms), djvulibre 3.5.30, plus png/tiff/webp/freetype. `queryFormats()` returns 264 formats on PHP 8.6 and targeted reads/writes work on all versions; full enumeration segfaults on 8.2–8.5 (targeted format queries and actual encode/decode are unaffected).
+- Link hygiene: `$DEPS/bin` is prepended to PATH so MacPorts `MagickWand-config` is never used; freetype's `.la` dependency on MacPorts harfbuzz is scrubbed; `normalize_module_links()` rewrites `@rpath` deps to MAMP absolute paths, deletes foreign LC_RPATHs and re-signs.
+- Legacy `php5.6.40` and `php7.4.33` still start via the `libsodium.23` compat symlink.
+- `otool -L` reports zero `/opt/local` references for every PHP binary and module.
+
+
+
 

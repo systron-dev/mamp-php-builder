@@ -1,18 +1,20 @@
 #!/bin/bash
-# Build missing PHP extensions for MAMP PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11
+# Build missing PHP extensions for MAMP PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12
 # All deps built from source — no Homebrew dependencies
 # Usage: ./build-mamp-ext.sh [target]
 # Targets: all | deps | ext | <specific> (see case block at bottom)
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 MAMP=/Applications/MAMP
 MAMPLIB=$MAMP/Library
-PHP82=$MAMP/bin/php/php8.2.34
-PHP83=$MAMP/bin/php/php8.3.35
-PHP84=$MAMP/bin/php/php8.4.26
-PHP85=$MAMP/bin/php/php8.5.11
+PHP82=$MAMP/bin/php/php8.2.35
+PHP83=$MAMP/bin/php/php8.3.36
+PHP84=$MAMP/bin/php/php8.4.27
+PHP85=$MAMP/bin/php/php8.5.12
 PHP86=$MAMP/bin/php/php8.6.0
 EXT82=$PHP82/lib/php/extensions/no-debug-non-zts-20220829
 EXT83=$PHP83/lib/php/extensions/no-debug-non-zts-20230831
@@ -21,6 +23,8 @@ EXT85=$PHP85/lib/php/extensions/no-debug-non-zts-20250925
 EXT86=$PHP86/lib/php/extensions/no-debug-non-zts-20260924
 BUILD="/tmp/php-build-${USER:-mamp}"
 DEPS=$BUILD/ext-deps        # static libs installed here
+# Prefer our own *-config tools over MacPorts copies of the same name.
+export PATH="$DEPS/bin:$PATH"
 SRC=$BUILD/ext-src          # source trees unpacked here
 NCPU=$(sysctl -n hw.ncpu)
 ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
@@ -41,17 +45,17 @@ LIBYAZ_VER=5.34.0
 
 APCU_VER=5.1.24
 IGBINARY_VER=3.2.16
-OAUTH_VER=2.0.9
-OAUTH_VER85=2.0.10  # 2.0.10 adds PHP 8.5 compat (zend_exception_get_default removed)
-REDIS_VER=6.1.0
+OAUTH_VER=2.0.10
+OAUTH_VER85=2.0.10
+REDIS_VER=6.3.0
 UPLOADPROGRESS_VER=2.0.2
-XDEBUG_VER=3.4.3
-XDEBUG_VER85=3.5.1  # xdebug 3.4.x requires PHP < 8.5; use 3.5.x for PHP 8.5
+XDEBUG_VER=3.5.3
+XDEBUG_VER85=3.5.3
 YAML_VER=2.2.4
-SSH2_VER=1.4.1
-MCRYPT_VER=1.0.7
-MEMCACHED_VER=3.3.0
-MEMCACHED_VER85=3.4.0  # 3.4.0 adds PHP 8.5 compat (zend_exception_get_default removed)
+SSH2_VER=1.5.0
+MCRYPT_VER=1.0.9
+MEMCACHED_VER=3.4.0
+MEMCACHED_VER85=3.4.0
 IMAGICK_VER=3.7.0
 YAZ_VER=1.2.4
 
@@ -158,11 +162,19 @@ _build_ext_one() {
   cd "$srcdir"
   "$phpdir/bin/phpize" --clean 2>/dev/null || true
   "$phpdir/bin/phpize" || return 1
-  # pcre2.h lives in MAMP Library — not searched by default phpize builds
-  CPPFLAGS="${CPPFLAGS:+$CPPFLAGS }-I$MAMPLIB/include" \
+  # pcre2.h lives in MAMP Library — not searched by default phpize builds.
+  # PHP 8.6 also gets a compat header for removed zval/INI macros.
+  local compat_flag=""
+  [ "$phpdir" = "$PHP86" ] && compat_flag="-include $SCRIPT_DIR/php86-compat.h"
+  CPPFLAGS="${CPPFLAGS:+$CPPFLAGS }-I$MAMPLIB/include $compat_flag" \
     ./configure --with-php-config="$phpdir/bin/php-config" $configure_args || return 1
   if [ -f Makefile ]; then
     sed -i.bak -E 's/^([A-Z_]+_SHARED_LIBADD = .* -lpq)/\1 -lpgcommon -lpgport -lssl -lcrypto -lz/g' Makefile || true
+  fi
+  # imagick: libtool drops the static Magick coder objects unless force-loaded.
+  if [ -f Makefile ] && [[ "$(basename "$srcdir")" == imagick-* ]]; then
+    local IMAGICK_DEPS="-Wl,-force_load,$DEPS/lib/libMagickWand-7.Q16HDRI.a -Wl,-force_load,$DEPS/lib/libMagickCore-7.Q16HDRI.a $DEPS/lib/libjbig.a $DEPS/lib/libtiff.a $DEPS/lib/libfreetype.a $DEPS/lib/libjxl.a $DEPS/lib/libhwy.a $DEPS/lib/libbrotlienc.a $DEPS/lib/libbrotlidec.a $DEPS/lib/libbrotlicommon.a $DEPS/lib/libjxl_cms.a $DEPS/lib/libjxl_threads.a $DEPS/lib/libpng16.a $DEPS/lib/libdjvulibre.a $DEPS/lib/libjpeg.a $DEPS/lib/libwebpmux.a $DEPS/lib/libwebpdemux.a $DEPS/lib/libwebp.a $DEPS/lib/libsharpyuv.a -L$MAMPLIB/lib -llzma -lbz2 -lz -lzip -lm -lpthread -framework CoreFoundation"
+    sed -i.bak -E "s|^IMAGICK_SHARED_LIBADD = .*|IMAGICK_SHARED_LIBADD = -Wl,-rpath,$DEPS/lib -L$DEPS/lib $IMAGICK_DEPS|" Makefile
   fi
   make -j$NCPU || return 1
   if [ "$(uname)" = "Darwin" ]; then
@@ -175,12 +187,42 @@ _build_ext_one() {
   fi
   if cp modules/*.so "$extdir/" 2>/dev/null; then
     log "    ✓ copied to $extdir"
+    # Sign the installed copies: signing only the build-tree module leaves
+    # macOS rejecting the copied bundle on arm64 ("CODESIGNING: Invalid Page").
+    if [ "$(uname)" = "Darwin" ]; then
+      for so_file in "$extdir"/*.so; do
+        [ -f "$so_file" ] && codesign --force --sign - "$so_file" 2>/dev/null || true
+      done
+      normalize_module_links "$extdir"
+    fi
   else
     local local_dist="$(cd "$(dirname "$0")" && pwd)/dist/$(basename $phpdir)"
     mkdir -p "$local_dist"
     cp modules/*.so "$local_dist/"
     warn "    ! Permission denied writing to $extdir. Copied to $local_dist instead."
   fi
+}
+
+# Make a module fully self-contained: resolve @rpath deps to MAMP Library and
+# delete rpaths outside MAMP (build-only prefixes such as /tmp/.../ext-deps).
+normalize_module_links() {
+  local dir=$1 so dep base rp
+  for so in "$dir"/*.so; do
+    [ -f "$so" ] || continue
+    for dep in $(otool -L "$so" | awk '$1 ~ /^@rpath\// {print $1}'); do
+      base=$(basename "$dep")
+      if [ -e "$MAMPLIB/lib/$base" ]; then
+        install_name_tool -change "$dep" "$MAMPLIB/lib/$base" "$so" 2>/dev/null || true
+      fi
+    done
+    for rp in $(otool -l "$so" | awk '/LC_RPATH/{getline;getline;print $2}'); do
+      case "$rp" in
+        "$MAMPLIB"/*) ;;
+        *) install_name_tool -delete_rpath "$rp" "$so" 2>/dev/null || true ;;
+      esac
+    done
+    codesign --force --sign - "$so" 2>/dev/null || true
+  done
 }
 
 # Build extension for all PHP versions
@@ -360,9 +402,16 @@ build_freetype() {
   cd "$SRC/$DIR"
   ./configure --prefix="$DEPS" --enable-static --disable-shared \
     --with-zlib=no \
+    --without-harfbuzz \
+    --without-brotli \
     CPPFLAGS="-I$DEPS/include" \
     LDFLAGS="-L$DEPS/lib"
   make -j$NCPU && make install
+  # Scrub MacPorts paths freetype's libtool archive records despite
+  # --without-harfbuzz, so dependent modules stay self-contained.
+  if [ -f "$DEPS/lib/libfreetype.la" ]; then
+    sed -i.bak -E "s#-L/opt/local/lib ##g; s#-lharfbuzz ##g" "$DEPS/lib/libfreetype.la"
+  fi
 }
 
 build_imagemagick() {
@@ -371,17 +420,78 @@ build_imagemagick() {
   local DIR="ImageMagick-$IMAGEMAGICK_VER"
   fetch_tar "https://github.com/ImageMagick/ImageMagick/archive/refs/tags/$IMAGEMAGICK_VER.tar.gz" "$DIR"
   cd "$SRC/$DIR"
+  # ImageMagick resolves zlib/libzip only through pkg-config. Provide local .pc
+  # files pointing at MAMP Library so no /opt/local search path is needed.
+  mkdir -p "$DEPS/lib/pkgconfig"
+  cat > "$DEPS/lib/pkgconfig/zlib.pc" <<EOF
+prefix=$MAMPLIB
+libdir=$MAMPLIB/lib
+includedir=$MAMPLIB/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.3.2
+Libs: -L\${libdir} -lz
+Cflags: -I\${includedir}
+EOF
+  cat > "$DEPS/lib/pkgconfig/libzip.pc" <<EOF
+prefix=$MAMPLIB
+libdir=$MAMPLIB/lib
+includedir=$MAMPLIB/include
+
+Name: libzip
+Description: library for reading/writing zip archives
+Version: 1.12
+Libs: -L\${libdir} -lzip
+Cflags: -I\${includedir}
+EOF
+  # freetype2.pc Requires bzip2; libtiff-4.pc Requires liblzma.
+  cat > "$DEPS/lib/pkgconfig/bzip2.pc" <<EOF
+prefix=$MAMPLIB
+libdir=$MAMPLIB/lib
+includedir=$MAMPLIB/include
+
+Name: bzip2
+Description: bzip2 compression library
+Version: 1.0.8
+Libs: -L\${libdir} -lbz2
+Cflags: -I\${includedir}
+EOF
+  cat > "$DEPS/lib/pkgconfig/liblzma.pc" <<EOF
+prefix=$MAMPLIB
+libdir=$MAMPLIB/lib
+includedir=$MAMPLIB/include
+
+Name: liblzma
+Description: xz compression library
+Version: 5.8.4
+Libs: -L\${libdir} -llzma
+Cflags: -I\${includedir}
+EOF
+  # freetype2.pc always lists harfbuzz even when built --without-harfbuzz.
+  cat > "$DEPS/lib/pkgconfig/harfbuzz.pc" <<EOF
+prefix=$MAMPLIB
+libdir=$MAMPLIB/lib
+includedir=$MAMPLIB/include
+
+Name: harfbuzz
+Description: HarfBuzz text shaping (not linked)
+Version: 12.0.0
+Libs:
+Cflags:
+EOF
   ./configure --prefix="$DEPS" \
     --enable-static --disable-shared \
     --disable-docs \
+    --without-utilities \
     --without-x \
     --without-perl \
     --without-magick-plus-plus \
     --with-jpeg="$DEPS" \
-    --with-png="$DEPS" \
-    --with-tiff="$DEPS" \
-    --with-webp="$DEPS" \
-    --with-freetype="$DEPS" \
+    --with-png=yes \
+    --with-tiff=yes \
+    --with-webp=yes \
+    --with-freetype=yes \
     --without-heic \
     --without-raw \
     --without-gvc \
@@ -392,6 +502,9 @@ build_imagemagick() {
     --without-openjp2 \
     --without-lqr \
     --without-openexr \
+    --with-jbig="$DEPS" \
+    --with-jxl="$DEPS" \
+    --with-djvu=yes \
     --without-fftw \
     --without-flif \
     --without-fpx \
@@ -403,7 +516,19 @@ build_imagemagick() {
     --without-gslib \
     CPPFLAGS="-I$DEPS/include -I$MAMPLIB/include" \
     LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib" \
-    PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$MAMPLIB/lib/pkgconfig"
+    ddjvuapi_CFLAGS="-I$DEPS/include" \
+    ddjvuapi_LIBS="-L$DEPS/lib -ldjvulibre" \
+    ZLIB_CFLAGS="-I$MAMPLIB/include" \
+    ZLIB_LIBS="-L$MAMPLIB/lib -lz" \
+    ZIP_CFLAGS="-I$MAMPLIB/include" \
+    ZIP_LIBS="-L$MAMPLIB/lib -lzip" \
+    LZMA_CFLAGS="-I$MAMPLIB/include" \
+    LZMA_LIBS="-L$MAMPLIB/lib -llzma" \
+    BZLIB_CFLAGS="-I$MAMPLIB/include" \
+    BZLIB_LIBS="-L$MAMPLIB/lib -lbz2" \
+    LIBS="-L$DEPS/lib -lbrotlicommon" \
+    PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" \
+    PKG_CONFIG_LIBDIR="$DEPS/lib/pkgconfig"
   make -j$NCPU && make install
 }
 
@@ -464,7 +589,10 @@ build_uploadprogress() {
 build_xdebug() {
   log "── xdebug $XDEBUG_VER ──"
   fetch_pecl "xdebug" "$XDEBUG_VER"
-  build_ext_both "$SRC/xdebug-$XDEBUG_VER"
+  # Link zlib from MAMP Library, not /opt/local (self-contained runtime)
+  ZLIB_CFLAGS="-I$MAMPLIB/include" ZLIB_LIBS="-L$MAMPLIB/lib -lz" \
+    CPPFLAGS="-I$MAMPLIB/include" LDFLAGS="-L$MAMPLIB/lib" \
+    build_ext_both "$SRC/xdebug-$XDEBUG_VER"
 }
 
 build_yaml_ext() {
@@ -480,9 +608,11 @@ build_ssh2_ext() {
   # Need OpenSSL static symbols pulled in since libssh2.a references them
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lssl -lcrypto"
-  build_ext_both "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS"
+  local rc=0
+  build_ext_both "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS" || rc=$?
   unset LDFLAGS LIBS
   restore_mamp_ssl
+  return $rc
 }
 
 build_mcrypt_ext() {
@@ -530,7 +660,7 @@ build_yaz_ext() {
 
 build_sysv_ext() {
   log "── sysvsem + sysvshm + sysvmsg + shmop (from PHP source) ──"
-  for PHP_VER in 8.2.34 8.3.35 8.4.26 8.5.11; do
+  for PHP_VER in 8.2.35 8.3.36 8.4.27 8.5.12; do
     local php_src="$SRC/php-$PHP_VER"
     local php_src_alt="$BUILD/php-$PHP_VER"
     if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
@@ -546,17 +676,38 @@ build_sysv_ext() {
 
   for ext in sysvsem sysvshm sysvmsg shmop; do
     log "  ── $ext ──"
-    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.34/ext/$ext" ""
-    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.35/ext/$ext" ""
-    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.26/ext/$ext" ""
-    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.11/ext/$ext"  ""
+    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.35/ext/$ext" ""
+    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.36/ext/$ext" ""
+    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.27/ext/$ext" ""
+    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.12/ext/$ext"  ""
+  done
+}
+
+build_sysv_ext_86() {
+  log "── sysvsem + sysvshm + sysvmsg + shmop (PHP 8.6 only) ──"
+  local PHP_VER="8.6.0RC4"
+  local php_src="$SRC/php-$PHP_VER"
+  local php_src_alt="$BUILD/php-$PHP_VER"
+  if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
+    ln -sf "$php_src_alt" "$php_src"
+    log "  symlinked $php_src_alt -> $php_src"
+  elif [ ! -d "$php_src" ]; then
+    log "  fetch PHP $PHP_VER source..."
+    curl -fsSL "https://downloads.php.net/~mbeccati/php-$PHP_VER.tar.gz" | tar xz -C "$SRC"
+  else
+    log "  skip download: php-$PHP_VER source exists"
+  fi
+
+  for ext in sysvsem sysvshm sysvmsg shmop; do
+    log "  ── $ext ──"
+    _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/$ext" ""
   done
 }
 
 build_pgsql_ext() {
   log "── pgsql + pdo_pgsql (from PHP source) ──"
   # These are bundled extensions — need PHP source tree
-  for PHP_VER in 8.2.34 8.3.35 8.4.26 8.5.11; do
+  for PHP_VER in 8.2.35 8.3.36 8.4.27 8.5.12; do
     local php_src="$SRC/php-$PHP_VER"
     # PHP build trees in /tmp/php-build are also valid sources
     local php_src_alt="$BUILD/php-$PHP_VER"
@@ -576,20 +727,92 @@ build_pgsql_ext() {
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
 
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.34/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.35/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.26/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.11/ext/pgsql"      "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.34/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.35/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.26/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.11/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS"
+  local rc=0
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.35/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.36/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.27/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.12/ext/pgsql"      "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.35/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.36/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.27/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.12/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS" || rc=$?
 
   unset LDFLAGS LIBS
   restore_mamp_ssl
+  return $rc
 }
 
 # ── Composite targets ──────────────────────────────────────────────────────────
+
+build_libjbig() {
+  log "── jbigkit 2.2 ──"
+  fetch_tar "https://www.cl.cam.ac.uk/~mgk25/jbigkit/download/jbigkit-2.2.tar.gz" "jbigkit-2.2"
+  cd "$SRC/jbigkit-2.2"
+  make -C libjbig CC=cc CFLAGS="-O2 -arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET" libjbig.a
+  install -m 644 libjbig/libjbig.a "$DEPS/lib/"
+  install -m 644 libjbig/jbig.h libjbig/jbig_ar.h "$DEPS/include/"
+}
+
+build_brotli() {
+  log "── brotli 1.2.1 ──"
+  fetch_tar "https://github.com/google/brotli/archive/refs/tags/v1.2.1.tar.gz" "brotli-1.2.1"
+  rm -rf "$SRC/brotli-1.2.1/build"
+  cmake -S "$SRC/brotli-1.2.1" -B "$SRC/brotli-1.2.1/build" \
+    -DCMAKE_INSTALL_PREFIX="$DEPS" -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF -DBROTLI_DISABLE_TESTS=ON
+  cmake --build "$SRC/brotli-1.2.1/build" -j"$NCPU"
+  cmake --install "$SRC/brotli-1.2.1/build"
+}
+
+build_highway() {
+  log "── highway 1.4.0 ──"
+  fetch_tar "https://github.com/google/highway/archive/refs/tags/1.4.0.tar.gz" "highway-1.4.0"
+  rm -rf "$SRC/highway-1.4.0/build"
+  cmake -S "$SRC/highway-1.4.0" -B "$SRC/highway-1.4.0/build" \
+    -DCMAKE_INSTALL_PREFIX="$DEPS" -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF -DHWY_ENABLE_TESTS=OFF -DHWY_ENABLE_EXAMPLES=OFF \
+    -DHWY_ENABLE_CONTRIB=OFF
+  cmake --build "$SRC/highway-1.4.0/build" -j"$NCPU"
+  cmake --install "$SRC/highway-1.4.0/build"
+}
+
+build_libjxl() {
+  log "── libjxl 0.12.0 ──"
+  fetch_tar "https://github.com/libjxl/libjxl/archive/refs/tags/v0.12.0.tar.gz" "libjxl-0.12.0"
+  rm -rf "$SRC/libjxl-0.12.0/build"
+  local SKCMS_COMMIT=96d9171c94b937a1b5f0293de7309ac16311b722
+  mkdir -p "$SRC/libjxl-0.12.0/third_party/skcms"
+  if [ ! -f "$SRC/libjxl-0.12.0/third_party/skcms/skcms.cc" ]; then
+    curl -fsSL "https://skia.googlesource.com/skcms/+archive/${SKCMS_COMMIT}.tar.gz" \
+      | tar xz -C "$SRC/libjxl-0.12.0/third_party/skcms"
+  fi
+  cmake -S "$SRC/libjxl-0.12.0" -B "$SRC/libjxl-0.12.0/build" \
+    -DCMAKE_INSTALL_PREFIX="$DEPS" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$DEPS;$MAMPLIB" \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+    -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_VIEWERS=OFF \
+    -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF \
+    -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF \
+    -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF \
+    -DJPEGXL_ENABLE_SKCMS=ON \
+    -DJPEGXL_FORCE_SYSTEM_BROTLI=ON -DJPEGXL_FORCE_SYSTEM_HWY=ON \
+    -DJPEGXL_BUNDLE_LIBPNG=OFF \
+    -DPNG_PNG_INCLUDE_DIR="$DEPS/include" -DPNG_LIBRARY="$DEPS/lib/libpng.a"
+  cmake --build "$SRC/libjxl-0.12.0/build" -j"$NCPU"
+  cmake --install "$SRC/libjxl-0.12.0/build"
+}
+
+build_djvulibre() {
+  log "── djvulibre 3.5.30 ──"
+  fetch_tar "https://download.sourceforge.net/djvu/DjVuLibre/3.5.30/djvulibre-3.5.30.tar.gz" "djvulibre-3.5.30"
+  cd "$SRC/djvulibre-3.5.30"
+  CPPFLAGS="-I$DEPS/include -I$MAMPLIB/include" \
+  LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib" \
+  ./configure --prefix="$DEPS" --disable-shared --enable-static \
+    --without-x --disable-desktopfiles
+  make -j"$NCPU"
+  make install
+}
 
 build_all_deps() {
   try_build libyaml       build_libyaml
@@ -601,6 +824,11 @@ build_all_deps() {
   try_build libpng        build_libpng
   try_build libtiff       build_libtiff
   try_build libwebp       build_libwebp
+  try_build libjbig       build_libjbig
+  try_build brotli        build_brotli
+  try_build highway       build_highway
+  try_build libjxl        build_libjxl
+  try_build djvulibre     build_djvulibre
   try_build freetype      build_freetype
   try_build imagemagick   build_imagemagick
   try_build libyaz        build_libyaz
@@ -649,21 +877,23 @@ build_mcrypt_ext_85() {
 
 build_pgsql_ext_85() {
   log "── pgsql + pdo_pgsql (PHP 8.5 only) ──"
-  local php_src="$SRC/php-8.5.11"
-  local php_src_alt="$BUILD/php-8.5.11"
+  local php_src="$SRC/php-8.5.12"
+  local php_src_alt="$BUILD/php-8.5.12"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
     ln -sf "$php_src_alt" "$php_src"
   elif [ ! -d "$php_src" ]; then
-    log "  fetch PHP 8.5.11 source..."
-    curl -fsSL "https://www.php.net/distributions/php-8.5.11.tar.gz" | tar xz -C "$SRC"
+    log "  fetch PHP 8.5.12 source..."
+    curl -fsSL "https://www.php.net/distributions/php-8.5.12.tar.gz" | tar xz -C "$SRC"
   fi
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
-  _build_ext_one "$PHP85" "$EXT85" "$php_src/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP85" "$EXT85" "$php_src/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  local rc=0
+  _build_ext_one "$PHP85" "$EXT85" "$php_src/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP85" "$EXT85" "$php_src/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
   unset LDFLAGS LIBS
   restore_mamp_ssl
+  return $rc
 }
 
 build_ssh2_85() {
@@ -672,15 +902,17 @@ build_ssh2_85() {
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lssl -lcrypto"
-  build_ext_85only "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS"
+  local rc=0
+  build_ext_85only "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS" || rc=$?
   unset LDFLAGS LIBS
   restore_mamp_ssl
+  return $rc
 }
 
 _build_apcu_85()           { fetch_pecl "apcu" "$APCU_VER";                   build_ext_85only "$SRC/apcu-$APCU_VER"; }
 _build_oauth_85()          { fetch_pecl "oauth" "$OAUTH_VER85";               build_ext_85only "$SRC/oauth-$OAUTH_VER85"; }
 _build_uploadprogress_85() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_85only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
-_build_xdebug_85()         { fetch_pecl "xdebug" "$XDEBUG_VER85";             build_ext_85only "$SRC/xdebug-$XDEBUG_VER85"; }
+_build_xdebug_85()         { fetch_pecl "xdebug" "$XDEBUG_VER85"; ZLIB_CFLAGS="-I$MAMPLIB/include" ZLIB_LIBS="-L$MAMPLIB/lib -lz" CPPFLAGS="-I$MAMPLIB/include" LDFLAGS="-L$MAMPLIB/lib" build_ext_85only "$SRC/xdebug-$XDEBUG_VER85"; }
 _build_redis_85()          { fetch_pecl "redis" "$REDIS_VER";                 build_ext_85only "$SRC/redis-$REDIS_VER" "--enable-redis-igbinary"; }
 _build_yaml_85()           { fetch_pecl "yaml" "$YAML_VER";                   build_ext_85only "$SRC/yaml-$YAML_VER" "--with-yaml=$DEPS"; }
 _build_memcached_85()      { fetch_pecl "memcached" "$MEMCACHED_VER85";       build_ext_85only "$SRC/memcached-$MEMCACHED_VER85" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"; }
@@ -731,6 +963,12 @@ build_mcrypt_ext_86() {
   log "── mcrypt $MCRYPT_VER (PHP 8.6 only) ──"
   fetch_pecl "mcrypt" "$MCRYPT_VER"
   local DIR="$SRC/mcrypt-$MCRYPT_VER"
+  # PHP 8.6 changed the stream-filter vtable; mcrypt_filter.c no longer compiles.
+  # Drop it and its registrations — mcrypt_encrypt/decrypt remain.
+  sed -i.bak 's/mcrypt.c mcrypt_filter.c/mcrypt.c/' "$DIR/config.m4"
+  sed -i.bak -e '/php_mcrypt_filter\.h/d' -e '/php_mcrypt_filter_factory/d' \
+    -e '/php_stream_filter_register_factory/d' -e '/php_stream_filter_unregister_factory/d' \
+    -e '/mcrypt_filter support/d' "$DIR/mcrypt.c"
   local rand_h="$PHP86/include/php/ext/standard/php_rand.h"
   if [ ! -f "$rand_h" ]; then
     printf '#pragma once\n#include "ext/random/php_random.h"\n#ifndef php_rand\n#define php_rand() rand()\n#endif\n' > "$rand_h"
@@ -740,39 +978,84 @@ build_mcrypt_ext_86() {
 
 build_pgsql_ext_86() {
   log "── pgsql + pdo_pgsql (PHP 8.6 only) ──"
-  local php_src="$SRC/php-8.6.0RC3"
-  local php_src_alt="$BUILD/php-8.6.0RC3"
+  local php_src="$SRC/php-8.6.0RC4"
+  local php_src_alt="$BUILD/php-8.6.0RC4"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
     ln -sf "$php_src_alt" "$php_src"
   elif [ ! -d "$php_src" ]; then
-    log "  fetch PHP 8.6.0RC3 source..."
-    curl -fsSL "https://downloads.php.net/~svpernova09/php-8.6.0RC3.tar.gz" | tar xz -C "$SRC"
+    log "  fetch PHP 8.6.0RC4 source..."
+    curl -fsSL "https://downloads.php.net/~mbeccati/php-8.6.0RC4.tar.gz" | tar xz -C "$SRC"
   fi
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
-  _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/pgsql"     "--with-pgsql=$DEPS"
-  _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS"
+  local rc=0
+  _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP86" "$EXT86" "$php_src/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
   unset LDFLAGS LIBS
   restore_mamp_ssl
+  return $rc
 }
 
 build_ssh2_86() {
   log "── ssh2 $SSH2_VER (PHP 8.6 only) ──"
   fetch_pecl "ssh2" "$SSH2_VER"
+  # PHP 8.6 removed zval_is_true()/zval_dtor(); upstream ssh2 1.5.0 still calls them.
+  sed -i.bak -E 's/zval_is_true\(/zend_is_true(/g; s/zval_dtor\(/zval_ptr_dtor(/g' \
+    "$SRC/ssh2-$SSH2_VER"/*.c
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lssl -lcrypto"
-  build_ext_86only "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS"
+  local rc=0
+  build_ext_86only "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS" || rc=$?
   unset LDFLAGS LIBS
   restore_mamp_ssl
+  return $rc
 }
 
-_build_apcu_86()           { fetch_pecl "apcu" "$APCU_VER";                   build_ext_86only "$SRC/apcu-$APCU_VER"; }
-_build_oauth_86()          { fetch_pecl "oauth" "$OAUTH_VER85";               build_ext_86only "$SRC/oauth-$OAUTH_VER85"; }
+build_apcu_86() {
+  log "── apcu $APCU_VER (PHP 8.6 only) ──"
+  fetch_pecl "apcu" "$APCU_VER"
+  # php_verror() lost its docref parameter in PHP 8.6.
+  sed -i.bak 's/php_verror(NULL, "", verbosity, format, args)/php_verror(NULL, verbosity, format, args)/' \
+    "$SRC/apcu-$APCU_VER/apc.c"
+  build_ext_86only "$SRC/apcu-$APCU_VER"
+}
+build_oauth_86() {
+  log "── oauth $OAUTH_VER85 (PHP 8.6 only) ──"
+  fetch_pecl "oauth" "$OAUTH_VER85"
+  local DIR="$SRC/oauth-$OAUTH_VER85"
+  # PHP 8.6 removed the XtOffsetOf macro; offsetof is the standard equivalent.
+  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
+  build_ext_86only "$DIR"
+}
 _build_uploadprogress_86() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_86only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
-_build_xdebug_86()         { fetch_pecl "xdebug" "$XDEBUG_VER85";             build_ext_86only "$SRC/xdebug-$XDEBUG_VER85"; }
-_build_redis_86()          { fetch_pecl "redis" "$REDIS_VER";                 build_ext_86only "$SRC/redis-$REDIS_VER" "--enable-redis-igbinary"; }
+build_xdebug_86() {
+  log "── xdebug $XDEBUG_VER85 (PHP 8.6 only) ──"
+  fetch_pecl "xdebug" "$XDEBUG_VER85"
+  local DIR="$SRC/xdebug-$XDEBUG_VER85"
+  # 3.5.3 works on 8.6 but refuses to configure; widen both version gates.
+  sed -i.bak -e 's/< 8\.6\.0/< 8.7.0/g' -e 's/-ge "80600"/-ge "80700"/g' "$DIR/config.m4"
+  # 8.6's ZSTR_INIT_LITERAL requires a literal; xdebug passes a char*.
+  sed -i.bak 's/ZSTR_INIT_LITERAL(tmp_name, false)/zend_string_init(tmp_name, strlen(tmp_name), false)/g' \
+    "$DIR/src/profiler/profiler.c"
+  ZLIB_CFLAGS="-I$MAMPLIB/include" ZLIB_LIBS="-L$MAMPLIB/lib -lz" \
+    CPPFLAGS="-I$MAMPLIB/include" LDFLAGS="-L$MAMPLIB/lib" \
+    build_ext_86only "$DIR"
+}
+build_redis_86() {
+  log "── redis $REDIS_VER (PHP 8.6 only) ──"
+  fetch_pecl "redis" "$REDIS_VER"
+  local DIR="$SRC/redis-$REDIS_VER"
+  # Removed PHP 8.6 macros are supplied by php86-compat.h (force-included).
+  # Clean up double invocations left by older sed-based attempts.
+  sed -i.bak -E 's/zend_wrong_param_count\(\)\(\)/zend_wrong_param_count()/g' "$DIR"/*.c
+  # PHP 8.6 session handlers take zend_string* (save_path/key/val).
+  sed -i.bak -E 's/strlen\(save_path\)/ZSTR_LEN(save_path)/g; s/save_path\[i\]/ZSTR_VAL(save_path)[i]/g; s/save_path\[j\]/ZSTR_VAL(save_path)[j]/g; s/estrndup\(save_path\+i/estrndup(ZSTR_VAL(save_path)+i/g; s/php_url_parse_ex\(save_path\+i/php_url_parse_ex(ZSTR_VAL(save_path)+i/g; s/estrdup\(save_path\)/estrdup(ZSTR_VAL(save_path))/g' \
+    "$DIR/redis_session.c"
+  # igbinary does not build on 8.6, so no igbinary serializer support here
+  build_ext_86only "$DIR"
+}
 _build_yaml_86()           { fetch_pecl "yaml" "$YAML_VER";                   build_ext_86only "$SRC/yaml-$YAML_VER" "--with-yaml=$DEPS"; }
 _build_memcached_86()      { fetch_pecl "memcached" "$MEMCACHED_VER85";       build_ext_86only "$SRC/memcached-$MEMCACHED_VER85" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"; }
 _build_imagick_86() {
@@ -790,12 +1073,13 @@ _build_imagick_86() {
 build_all_ext_86only() {
   # igbinary first — redis/memcached depend on its headers
   try_build igbinary       build_igbinary_86
-  try_build apcu           _build_apcu_86
-  try_build oauth          _build_oauth_86
+  try_build apcu           build_apcu_86
+  try_build oauth          build_oauth_86
   try_build uploadprogress _build_uploadprogress_86
-  try_build xdebug         _build_xdebug_86
-  try_build redis          _build_redis_86
+  try_build xdebug         build_xdebug_86
+  try_build redis          build_redis_86
   try_build yaml           _build_yaml_86
+  try_build sysv           build_sysv_ext_86
   try_build ssh2           build_ssh2_86
   try_build mcrypt         build_mcrypt_ext_86
   try_build memcached      _build_memcached_86
@@ -818,6 +1102,11 @@ case "$TARGET" in
   libpng)       build_libpng ;;
   libtiff)      build_libtiff ;;
   libwebp)      build_libwebp ;;
+  libjbig)      build_libjbig ;;
+  brotli)       build_brotli ;;
+  highway)      build_highway ;;
+  libjxl)       build_libjxl ;;
+  djvulibre)    build_djvulibre ;;
   freetype)     build_freetype ;;
   imagemagick)  build_imagemagick ;;
   libyaz)       build_libyaz ;;
@@ -832,11 +1121,23 @@ case "$TARGET" in
   xdebug)         build_xdebug ;;
   yaml)           build_yaml_ext ;;
   ssh2)           build_ssh2_ext ;;
+  ssh286)         build_ssh2_86 ;;
   mcrypt)         build_mcrypt_ext ;;
+  mcrypt86)       build_mcrypt_ext_86 ;;
+  apcu86)         build_apcu_86 ;;
+  yaml86)         _build_yaml_86 ;;
+  igbinary86)     build_igbinary_86 ;;
+  uploadprogress86) _build_uploadprogress_86 ;;
+  memcached86)    _build_memcached_86 ;;
+  imagick86)      _build_imagick_86 ;;
+  oauth86)        build_oauth_86 ;;
+  redis86)        build_redis_86 ;;
+  xdebug86)       build_xdebug_86 ;;
   memcached)      build_memcached_ext ;;
   imagick)        build_imagick_ext ;;
   yaz)            build_yaz_ext ;;
   sysv)           build_sysv_ext ;;
+  sysv86)         build_sysv_ext_86 ;;
   pgsql)          build_pgsql_ext ;;
   ext)            build_all_ext ;;
   ext85)          build_all_ext_85only ;;
@@ -850,7 +1151,7 @@ case "$TARGET" in
     ;;
   *)
     err "Unknown target: $TARGET"
-    echo "Usage: $0 [all|deps|ext|ext85|ext86|libyaml|libssh2|libmcrypt|libmemcached|libpq|libjpeg|libpng|libtiff|libwebp|freetype|imagemagick|libyaz|apcu|igbinary|oauth|redis|uploadprogress|xdebug|yaml|ssh2|mcrypt|memcached|imagick|yaz|sysv|pgsql]"
+    echo "Usage: $0 [all|deps|ext|ext85|ext86|libyaml|libssh2|libmcrypt|libmemcached|libpq|libjpeg|libpng|libtiff|libwebp|freetype|imagemagick|libyaz|apcu|igbinary|oauth|redis|uploadprogress|xdebug|yaml|ssh2|mcrypt|memcached|imagick|yaz|sysv|sysv86|pgsql]"
     exit 1 ;;
 esac
 

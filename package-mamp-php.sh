@@ -3,7 +3,7 @@
 # Usage: ./package-mamp-php.sh [version ...]
 # Examples:
 #   ./package-mamp-php.sh
-#   ./package-mamp-php.sh 8.6.0RC3
+#   ./package-mamp-php.sh 8.6.0RC4
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ DIST_DIR="${START_DIR}/dist"
 ARCH="$(uname -m)"  # arm64 on Apple Silicon, x86_64 on Intel
 PHP_BASE="/Applications/MAMP/bin/php"
 
-VERSIONS=("8.2.34" "8.3.35" "8.4.26" "8.5.11" "8.6.0RC3")
+VERSIONS=("8.2.35" "8.3.36" "8.4.27" "8.5.12" "8.6.0RC4")
 if [ $# -gt 0 ]; then
   VERSIONS=("$@")
 fi
@@ -20,7 +20,7 @@ fi
 mkdir -p "$DIST_DIR"
 
 for version in "${VERSIONS[@]}"; do
-  # MAMP Pro requires numeric install dirs (8.6.0RC3 -> php8.6.0)
+  # MAMP Pro requires numeric install dirs (8.6.0RC4 -> php8.6.0)
   install_version=$(printf '%s' "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
   target_dir="${PHP_BASE}/php${install_version}"
   archive_name="php${version}-${ARCH}.tar.gz"
@@ -38,6 +38,8 @@ for version in "${VERSIONS[@]}"; do
   )
 
   echo "==> Created ${archive_path} ($(ls -lh "$archive_path" | awk '{print $5}'))"
+  shasum -a 256 "$archive_path" > "${archive_path}.sha256"
+  echo "==> Created ${archive_path}.sha256"
 done
 
 echo "==> Packaging complete!"
