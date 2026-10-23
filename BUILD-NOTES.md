@@ -446,3 +446,23 @@ Final state after rebuild:
 
 
 
+
+
+## Legacy PHP 5.6 and 7.4 (2026-10-23)
+
+Built from `shivammathur/php-src-backports`; both include the bailout/state-corruption
+backport for CVE-2026-109618 and CVE-2026-109619.
+
+- Toolchain: OpenSSL 1.1.1w static, static libxml2 2.9.14 (MAMP's copy hides
+  `xmlXPathValuePop/Push`), `-std=gnu89` for 5.6 and `-std=gnu11` for 7.4.
+- 5.6: bundled oniguruma with MAMP's header hidden during build; tidy disabled at compile
+  time (`buffio.h` removed in tidy 5.8); OPcache disabled (module link failure).
+- 7.4: xsl objects and libs stripped from the Makefile for the same libxml2 reason.
+- Rebuilt extensions: apcu, igbinary, imagick, memcached, oauth, redis, uploadprogress,
+  yaml, xdebug (7.4 additionally mcrypt/ssh2/sysv).
+- PHP-API-compatible prebuilt modules restored for imap, mcrypt (5.6), pgsql, pdo_pgsql,
+  tidy, yaz and OPcache. All load with zero warnings and no `/opt/local` references.
+  `imap` uses c-client 2007f (unmaintained, insecure).
+- Stale/unusable modules (`apc`, `memcache`) moved to
+  `$BUILD/legacy-backup/stale-56/` and `stale-74/`.
+- OpenSSL 1.1.1w is itself EOL; these builds are for legacy compatibility only.

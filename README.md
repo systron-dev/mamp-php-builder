@@ -15,6 +15,9 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | `build-mamp-ext.sh` | Build all C deps + PECL extensions |
 | `build-zlib-mamp.sh` | Build zlib 1.3.2 into MAMP Library |
 | `build-deps-mamp.sh` | Phase A library modernization (OpenSSL, curl, ICU-independent libs) |
+| `build-legacy-php.sh` | Build EOL PHP 5.6 / 7.4 from security-backport branches |
+| `build-legacy-ext.sh` | Rebuild PECL extensions for PHP 7.4 |
+| `build-legacy-ext56.sh` | Rebuild PECL extensions for PHP 5.6 |
 | `build-curl-mamp.sh` | Legacy single-library libcurl rebuild (superseded by `build-deps-mamp.sh`) |
 | `compile-all-php.sh` | Orchestration script to configure, compile, and install multiple PHP versions |
 | `configure-mamp-ini.py` | Generate and inject `php.ini`, `pear.conf`, and `php.ini.temp` |
@@ -126,6 +129,27 @@ The latest `x86_64` artifacts were built on a Mac mini 6-core Intel running macO
 `configure-mamp-ini.py` enables every shared extension it finds in the version's extension
 directory. **xdebug is the exception** — its `zend_extension` line is written commented out to
 avoid slowing every CLI call; uncomment it when debugging.
+
+## Legacy builds (PHP 5.6 / 7.4)
+
+`build-legacy-php.sh` builds EOL PHP from community security-backport branches
+(`shivammathur/php-src-backports`), which include the CVE-2026-109618/109619 fixes:
+
+| Version | Source branch | Extensions |
+|---|---|---|
+| 5.6.40 | `PHP-5.6-security-backports-openssl11` | apcu, igbinary, imagick, imap*, mcrypt*, memcached, oauth, pgsql*, pdo_pgsql*, redis, tidy*, uploadprogress, yaml, yaz*, OPcache (compatible prebuilt modules marked *) |
+| 7.4.33 | `PHP-7.4-security-backports` | apcu, igbinary, imagick, imap*, mcrypt, memcached, oauth, pgsql*, pdo_pgsql*, redis, ssh2, uploadprogress, yaml, yaz*, sysv*, OPcache (prebuilt marked *) |
+
+Both link **OpenSSL 1.1.1w static** (legacy PHP cannot use OpenSSL 3). Deliberately
+omitted: `gd`, `sqlite3`/`pdo_sqlite`, `xsl` (incompatible with current MAMP libs).
+`imap` uses the legacy c-client 2007f module and is insecure; enable only when needed.
+Both backport branches include the CVE-2023-0662 multipart DoS fix; `php.ini` pins
+`max_multipart_body_parts = 1000` (upstream default is unlimited).
+
+> [!WARNING]
+> Both versions are end-of-life. The backports cover known CVEs only. OpenSSL 1.1.1w
+> ended support in September 2023 and has no further security fixes. Do not expose
+> these builds to untrusted networks.
 
 ## Security
 

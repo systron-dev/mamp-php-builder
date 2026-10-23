@@ -28,9 +28,10 @@ All commands below use these variables.
 5. [Step 2 — Build PHP](#step-2--build-php)
 6. [Step 3 — Build PHP Extensions](#step-3--build-php-extensions)
 7. [Step 4 — Install Conf Files](#step-4--install-conf-files)
-8. [Verification](#verification)
-9. [Adding Another PHP Version](#adding-another-php-version)
-10. [Known Issues & Gotchas](#known-issues--gotchas)
+8. [Legacy builds — PHP 5.6 and 7.4](#legacy-builds--php-56-and-74)
+9. [Verification](#verification)
+10. [Adding Another PHP Version](#adding-another-php-version)
+11. [Known Issues & Gotchas](#known-issues--gotchas)
 
 ---
 
@@ -198,6 +199,35 @@ libjpeg-turbo and OpenLDAP 2.6.
 > `libsodium.23.dylib` symlink is kept so the legacy `php7.4.33` install still runs.
 
 ---
+
+## Legacy builds — PHP 5.6 and 7.4
+
+EOL versions are built from `shivammathur/php-src-backports` (community security
+backports, including CVE-2026-109618/109619) with a private OpenSSL 1.1.1w prefix:
+
+```bash
+bash build-legacy-php.sh 7.4      # PHP 7.4.33
+bash build-legacy-php.sh 5.6      # PHP 5.6.40
+bash build-legacy-ext.sh          # 7.4 extensions
+bash build-legacy-ext56.sh        # 5.6 extensions
+```
+
+Key differences from the 8.x builds:
+
+- OpenSSL **1.1.1w static** in `$BUILD/legacy-deps`; PHP 5.6/7.4 cannot use OpenSSL 3.
+- Private static **libxml2 2.9.14** — MAMP's copy hides `xmlXPathValuePop/Push`.
+- C standard forced: `gnu89` (5.6), `gnu11` (7.4); Xcode 21 clang defaults to C23.
+- 5.6: bundled oniguruma (MAMP header hidden during build), tidy disabled (`buffio.h`
+  missing in tidy 5.8), OPcache disabled at build time.
+- 7.4: xsl objects/libs stripped from the Makefile (same libxml2 issue).
+- Rebuilt extensions: apcu, igbinary, imagick, memcached, oauth, redis,
+  uploadprogress, yaml, xdebug (7.4 also mcrypt/ssh2/sysv).
+- Compatible prebuilt modules retained: imap, mcrypt (5.6), pgsql, pdo_pgsql, tidy,
+  yaz, OPcache. `imap` depends on c-client 2007f and is insecure.
+- Omitted: gd, sqlite3/pdo_sqlite, xsl (incompatible with current MAMP libs).
+
+> **Warning:** PHP 5.6/7.4 are end-of-life, and OpenSSL 1.1.1w ended support in
+> September 2023. These builds cover known CVEs only — do not expose them.
 
 ## Step 2 — Build PHP
 
