@@ -102,10 +102,10 @@ Host environments used for builds in this repo:
 | Item | Apple Silicon (`arm64`) | Intel (`x86_64`) |
 |------|-------------------------|------------------|
 | Hardware | Apple Silicon host | Mac mini 6-core Intel |
-| macOS | 27.0.1 (build 26A434) | macOS Sequoia 15 (15.8.1) |
-| Darwin kernel | 27.0.0 | — |
+| macOS | 27.0.1 (build 26A434) | macOS Sequoia 15 (15.8.1, build 24H32) |
+| Darwin kernel | 27.0.0 | 24.6.0 |
 | Architecture | arm64 | x86_64 |
-| SDK | 27.0 | — |
+| SDK | 27.0 | macOS 15.5 SDK / CLT |
 | Deployment target | 12.0 | 12.0 |
 | MAMP | 6.9 at `/Applications/MAMP` | 6.9 at `/Applications/MAMP` |
 

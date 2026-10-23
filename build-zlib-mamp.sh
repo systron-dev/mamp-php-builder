@@ -56,9 +56,10 @@ echo "==> Installing zlib $VERSION into $MAMP..."
 # Targeted install: MAMP's lib/pkgconfig is root-owned, and `make install`
 # aborts there before copying headers. Install only what the build needs.
 install -m 644 libz.a                    "$MAMP/lib/libz.a"
-install -m 755 "libz.1.$VERSION.dylib"   "$MAMP/lib/libz.1.$VERSION.dylib"
-ln -sfn "libz.1.$VERSION.dylib"          "$MAMP/lib/libz.1.dylib"
-ln -sfn "libz.1.$VERSION.dylib"          "$MAMP/lib/libz.dylib"
+install -m 755 "libz.$VERSION.dylib"     "$MAMP/lib/libz.$VERSION.dylib"
+ln -sfn "libz.$VERSION.dylib"            "$MAMP/lib/libz.1.dylib"
+ln -sfn "libz.$VERSION.dylib"            "$MAMP/lib/libz.dylib"
+ln -sfn "libz.$VERSION.dylib"            "$MAMP/lib/libz.1.$VERSION.dylib"
 install -m 644 zlib.h zconf.h            "$MAMP/include/"
 install -m 644 zlib.3                    "$MAMP/share/man/man3/"
 # pkgconfig is optional; skip when the directory is not writable
@@ -67,7 +68,7 @@ if [ -w "$MAMP/lib/pkgconfig" ]; then
 fi
 
 # Ad-hoc sign the new dylib (arm64 requires a valid signature)
-codesign --force --sign - "$MAMP/lib/libz.1.$VERSION.dylib" 2>/dev/null || true
+codesign --force --sign - "$MAMP/lib/libz.$VERSION.dylib" 2>/dev/null || true
 
 echo "==> Verify:"
 otool -D "$MAMP/lib/libz.1.dylib"

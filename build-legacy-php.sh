@@ -113,7 +113,9 @@ install_php() {
   fi
   # Xcode 21's clang defaults to C23, which rejects K&R definitions.
   local legacy_cflags="$CFLAGS -std=$std ${warn_flags:-}"
-  local legacy_cxxflags="$CXXFLAGS -std=$([ "$std" = gnu89 ] && echo gnu++98 || echo gnu++11)"
+  local libcxx_inc
+  libcxx_inc="$(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1"
+  local legacy_cxxflags="$CXXFLAGS -std=$([ "$std" = gnu89 ] && echo gnu++98 || echo gnu++11) -isystem $libcxx_inc"
   cd "$SRC/$dir"
   ./buildconf --force
   hide_ssl
@@ -160,6 +162,8 @@ install_php() {
     ARGON2_LIBS="-L$MAMP/lib -largon2" \
     ICU_CFLAGS="-I$MAMP/include" \
     ICU_LIBS="-L$MAMP/lib -licui18n -licuuc -licudata -licuio" \
+    ONIG_CFLAGS="-I$MAMP/include" \
+    ONIG_LIBS="-L$MAMP/lib -lonig" \
     CFLAGS="$legacy_cflags" CXXFLAGS="$legacy_cxxflags" \
     LIBS="-lresolv" \
     LDFLAGS="-arch $ARCH -mmacosx-version-min=$DEPLOY -L$LEGACY/lib -L$MAMP/lib -Wl,-force_load,$LEGACY/lib/libssl.a -Wl,-force_load,$LEGACY/lib/libcrypto.a" \

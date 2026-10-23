@@ -7,7 +7,7 @@ metadata:
   originSessionId: 3aba1562-b5c3-44a5-b50e-3e6e54ef7924
 ---
 
-PHP 8.2.34, 8.3.35, 8.4.26, 8.5.11, and 8.6.0RC3 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
+PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, 8.6.0RC4, and legacy PHP 7.4.33 / 5.6.40 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
 
 **Why:** MAMP PRO v6.9 no longer offers newer PHP packages for download; only v7.x gets updates. Homebrew packages were rejected — all deps must be self-contained in `/Applications/MAMP/Library`.
 
@@ -466,3 +466,18 @@ backport for CVE-2026-109618 and CVE-2026-109619.
 - Stale/unusable modules (`apc`, `memcache`) moved to
   `$BUILD/legacy-backup/stale-56/` and `stale-74/`.
 - OpenSSL 1.1.1w is itself EOL; these builds are for legacy compatibility only.
+
+---
+
+## Intel (x86_64) Cross-Architecture Verification & Rebuild (2026-10-24)
+
+All PHP builds and extensions were verified and built natively on Intel Mac mini (`x86_64`, macOS Sequoia 15.8.1, Darwin 24.6.0) targeting `MACOSX_DEPLOYMENT_TARGET=12.0`:
+
+- **Phase A modern dependencies**: zlib 1.3.2, OpenSSL 3.6.5 static, nghttp2 1.70, curl 8.23, freetype 2.15, libpng 1.6.59, libzip 1.12, tidy 5.8, libsodium 1.0.22, webp 1.6, oniguruma 6.9.10 built and installed into `/Applications/MAMP/Library`.
+- **C++ Standard Library include fix**: Added `-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1` to `CXXFLAGS` across `build-mamp-ext.sh` and `build-legacy-php.sh`. This ensures Apple Clang on modern macOS SDKs can resolve `<string>`, `<iostream>`, `<new>`, and `<cassert>` across both arm64 and x86_64.
+- **PHP 5.6 extension linking on modern Darwin**: Injected `allow_undefined_flag="-Wl,-undefined,dynamic_lookup"` into `libtool` in `build-legacy-ext56.sh` to resolve undefined symbol errors during shared module linking on modern Darwin (macOS ≥ 11).
+- **Core PHP builds & extensions**:
+  - `php8.2.35`, `php8.3.36`, `php8.4.27`, `php8.5.12`, `php8.6.0` (from 8.6.0RC4) built and verified.
+  - Legacy `php7.4.33` and `php5.6.40` built and verified with compatible extensions.
+- **Packaging**: `./package-mamp-php.sh` generated tarballs and sha256 checksums in `dist/` for all versions with architecture suffix `-x86_64.tar.gz`. Zero runtime dependencies outside `/Applications/MAMP/Library`.
+

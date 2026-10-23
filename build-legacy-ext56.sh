@@ -60,6 +60,9 @@ _build_one() {
     local IMAGICK_DEPS="-Wl,-force_load,$DEPS/lib/libMagickWand-7.Q16HDRI.a -Wl,-force_load,$DEPS/lib/libMagickCore-7.Q16HDRI.a $DEPS/lib/libjbig.a $DEPS/lib/libtiff.a $DEPS/lib/libfreetype.a $DEPS/lib/libjxl.a $DEPS/lib/libhwy.a $DEPS/lib/libbrotlienc.a $DEPS/lib/libbrotlidec.a $DEPS/lib/libbrotlicommon.a $DEPS/lib/libjxl_cms.a $DEPS/lib/libjxl_threads.a $DEPS/lib/libpng16.a $DEPS/lib/libdjvulibre.a $DEPS/lib/libjpeg.a $DEPS/lib/libwebpmux.a $DEPS/lib/libwebpdemux.a $DEPS/lib/libwebp.a $DEPS/lib/libsharpyuv.a -L$MAMPLIB -llzma -lbz2 -lz -lzip -lm -lpthread -framework CoreFoundation"
     sed -i.bak -E "s|^IMAGICK_SHARED_LIBADD = .*|IMAGICK_SHARED_LIBADD = -Wl,-rpath,$DEPS/lib -L$DEPS/lib $IMAGICK_DEPS|" Makefile
   fi
+  if [ -f libtool ]; then
+    sed -i.bak 's/allow_undefined_flag=""/allow_undefined_flag="-Wl,-undefined,dynamic_lookup"/' libtool
+  fi
   make -j"$NCPU" >/dev/null
   cp modules/*.so "$EXT74/"
   for so in "$EXT74"/*.so; do codesign --force --sign - "$so" 2>/dev/null || true; done
@@ -102,7 +105,7 @@ build_igbinary() {
 }
 
 build_sysv() {
-  local src="$BUILD/legacy-src/php-src-backports-PHP-7.4-security-backports"
+  local src="$BUILD/legacy-src/php-src-backports-PHP-5.6-security-backports-openssl11"
   [ -d "$src" ] || { log "missing 7.4 source tree"; return 1; }
   for ext in sysvmsg sysvshm sysvsem shmop; do
     _build_one "$src/ext/$ext"

@@ -93,7 +93,7 @@ if [ -z "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
 fi
 echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
 
-export CXXFLAGS="-arch $ARCH"
+export CXXFLAGS="-arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[BUILD]${NC} $*"; }
@@ -655,7 +655,7 @@ build_yaz_ext() {
   log "── yaz $YAZ_VER ──"
   fetch_pecl "yaz" "$YAZ_VER"
   # --with-yaz expects the dir containing bin/yaz-config
-  build_ext_both "$SRC/yaz-$YAZ_VER" "--with-yaz=$DEPS"
+  build_ext_both "$SRC/yaz-$YAZ_VER" "--with-yaz=$MAMPLIB"
 }
 
 build_sysv_ext() {

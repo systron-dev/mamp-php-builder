@@ -104,7 +104,7 @@ xcode-select --install
 ### MacPorts (build-time tools only)
 MacPorts supplies the build tools. No MacPorts library is linked into the result.
 ```bash
-sudo port install pkgconfig autoconf libtool gettext wget git
+sudo port install pkgconfig autoconf libtool gettext wget git bison re2c
 ```
 `cmake` is bootstrapped automatically into `$BUILD/cmake-bin` when missing. All linked
 libraries are shipped by MAMP or built from source by the scripts in this repo.
@@ -114,6 +114,12 @@ It is also used to supply a modern `config.sub`/`config.guess` when building lib
 # Check it exists — only needed if building mcrypt extension
 ls /opt/local/share/libtool/build-aux/config.sub
 ```
+
+> [!NOTE]
+> **Cross-Architecture & macOS SDK Notes:**
+> - When compiling C++ extensions (e.g. `intl`, `libmemcached-awesome`, `libtiff`, `djvulibre`, `libjxl`), Apple Clang on modern macOS requires `-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1` in `CXXFLAGS` so C++ standard library headers (`<string>`, `<iostream>`, `<cassert>`) resolve properly. All build scripts (`build-mamp-ext.sh`, `build-legacy-php.sh`) include this automatically.
+> - On modern Darwin (macOS 11+ on both arm64 and x86_64), legacy autoconf/libtool in PHP 5.6 requires explicit injection of `allow_undefined_flag="-Wl,-undefined,dynamic_lookup"` into `libtool` to link shared extensions correctly (`build-legacy-ext56.sh` handles this).
+
 
 ### Download PHP source
 ```bash
