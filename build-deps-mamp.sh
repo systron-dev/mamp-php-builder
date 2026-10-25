@@ -14,7 +14,8 @@ MAMP=/Applications/MAMP/Library
 BUILD="/tmp/php-build-${USER:-mamp}/deps-phase-a"
 SRC="$BUILD/src"
 BACKUP="$BUILD/backup"
-ARCH=$(uname -m)
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 NCPU=$(sysctl -n hw.ncpu)
@@ -71,17 +72,8 @@ fetch() {
   fi
 }
 
-hide_ssl() {
-  for f in libssl.dylib libcrypto.dylib; do
-    [ -L "$MAMP/lib/$f" ] && mv "$MAMP/lib/$f" "$MAMP/lib/$f.hidden"
-  done
-}
-restore_ssl() {
-  for f in libssl.dylib libcrypto.dylib; do
-    [ -L "$MAMP/lib/$f.hidden" ] && mv "$MAMP/lib/$f.hidden" "$MAMP/lib/$f"
-  done
-  return 0
-}
+hide_ssl()    { hide_openssl_dylibs "$MAMP/lib"; }
+restore_ssl() { restore_openssl_dylibs "$MAMP/lib"; }
 trap restore_ssl EXIT
 
 # Install into a staging prefix first, then copy into MAMP. MAMP's
@@ -217,6 +209,10 @@ build_tidy() {
   cmake --build build -j"$NCPU"
   stash "$MAMP/lib/libtidy*"; stash "$MAMP/include/tidy*.h"
   stage_cmake tidy build
+  # Compat symlink for legacy PHP 5.6/7.4 prebuilt tidy.so
+  if [ -f "$MAMP/lib/libtidy.58.dylib" ]; then
+    ln -sfn "libtidy.58.dylib" "$MAMP/lib/libtidy.5.dylib"
+  fi
 }
 
 build_libsodium() {
@@ -229,6 +225,10 @@ build_libsodium() {
   make -j"$NCPU"
   stash "$MAMP/lib/libsodium*"; stash "$MAMP/include/sodium/*.h"
   stage_autotools libsodium
+  # Compat symlink for legacy PHP 7.4 sodium linkage
+  if [ -f "$MAMP/lib/libsodium.26.dylib" ]; then
+    ln -sfn "libsodium.26.dylib" "$MAMP/lib/libsodium.23.dylib"
+  fi
 }
 
 build_webp() {

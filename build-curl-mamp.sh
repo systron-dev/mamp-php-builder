@@ -13,7 +13,8 @@
 set -e
 
 CURL_VERSION="${1:-8.7.1}"
-ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 MAMP=/Applications/MAMP/Library
 BUILD="/tmp/php-build-${USER:-mamp}"
 SRC="${BUILD}/curl-${CURL_VERSION}"
@@ -65,31 +66,9 @@ fi
 export PATH="$MAMP/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # --- Hide old OpenSSL dylib symlinks so linker falls back to .a (OpenSSL 3) ---
-LIBSSL_SYMLINK="$MAMP/lib/libssl.dylib"
-LIBCRYPTO_SYMLINK="$MAMP/lib/libcrypto.dylib"
-LIBSSL_MOVED=0
-LIBCRYPTO_MOVED=0
-
-restore_symlinks() {
-  if [ $LIBSSL_MOVED -eq 1 ]; then
-    mv "$MAMP/lib/libssl.dylib.hidden" "$LIBSSL_SYMLINK" 2>/dev/null && echo "==> Restored libssl.dylib"
-  fi
-  if [ $LIBCRYPTO_MOVED -eq 1 ]; then
-    mv "$MAMP/lib/libcrypto.dylib.hidden" "$LIBCRYPTO_SYMLINK" 2>/dev/null && echo "==> Restored libcrypto.dylib"
-  fi
-}
-trap restore_symlinks EXIT
-
-if [ -L "$LIBSSL_SYMLINK" ]; then
-  mv "$LIBSSL_SYMLINK" "$MAMP/lib/libssl.dylib.hidden"
-  LIBSSL_MOVED=1
-  echo "==> Hid libssl.dylib (will restore on exit)"
-fi
-if [ -L "$LIBCRYPTO_SYMLINK" ]; then
-  mv "$LIBCRYPTO_SYMLINK" "$MAMP/lib/libcrypto.dylib.hidden"
-  LIBCRYPTO_MOVED=1
-  echo "==> Hid libcrypto.dylib (will restore on exit)"
-fi
+trap 'restore_openssl_dylibs "$MAMP/lib"' EXIT
+hide_openssl_dylibs "$MAMP/lib"
+echo "==> Hid OpenSSL dylibs (restored on exit)"
 # -----------------------------------------------------------------------------
 
 cd "$SRC"

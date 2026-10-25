@@ -27,7 +27,8 @@ DEPS=$BUILD/ext-deps        # static libs installed here
 export PATH="$DEPS/bin:$PATH"
 SRC=$BUILD/ext-src          # source trees unpacked here
 NCPU=$(sysctl -n hw.ncpu)
-ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 
 # ── Versions ──────────────────────────────────────────────────────────────────
 LIBYAML_VER=0.2.5
@@ -51,6 +52,9 @@ REDIS_VER=6.3.0
 UPLOADPROGRESS_VER=2.0.2
 XDEBUG_VER=3.5.3
 XDEBUG_VER85=3.5.3
+# 3.6.0alpha1 is the first release accepting PHP 8.6 (gate: >= 8.2, < 8.7)
+# and it carries its own PHP_VERSION_ID >= 80600 fixes. Not on PECL — alpha.
+XDEBUG_VER86=3.6.0alpha1
 YAML_VER=2.2.4
 SSH2_VER=1.5.0
 MCRYPT_VER=1.0.9
@@ -93,6 +97,9 @@ if [ -z "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
 fi
 echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
 
+# Deliberately ignore an inherited CFLAGS: a Rosetta shell may carry
+# -arch x86_64, which would defeat the native-only guarantee.
+export CFLAGS="-O2 -g -arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
 export CXXFLAGS="-arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -108,6 +115,8 @@ preflight() {
   done
   [ -f "$MAMPLIB/lib/libssl.a" ]    || { err "Missing $MAMPLIB/lib/libssl.a — build OpenSSL 3 first"; fail=1; }
   [ -f "$MAMPLIB/lib/libcrypto.a" ] || { err "Missing $MAMPLIB/lib/libcrypto.a — build OpenSSL 3 first"; fail=1; }
+  # Static libs must be native; a Library tree populated on the other arch fails late.
+  [ $fail -eq 0 ] && require_native_mamp_libs "$MAMPLIB"
   [ -x "$PHP82/bin/phpize" ]        || { err "Missing $PHP82/bin/phpize"; fail=1; }
   [ -x "$PHP83/bin/phpize" ]        || { err "Missing $PHP83/bin/phpize"; fail=1; }
   [ -x "$PHP84/bin/phpize" ]        || { err "Missing $PHP84/bin/phpize"; fail=1; }
@@ -128,14 +137,10 @@ preflight() {
 }
 
 # ── OpenSSL dylib hide/restore ─────────────────────────────────────────────────
-hide_mamp_ssl() {
-  [ -f "$MAMPLIB/lib/libssl.dylib" ]    && mv "$MAMPLIB/lib/libssl.dylib"    "$MAMPLIB/lib/libssl.dylib.hidden"    || true
-  [ -f "$MAMPLIB/lib/libcrypto.dylib" ] && mv "$MAMPLIB/lib/libcrypto.dylib" "$MAMPLIB/lib/libcrypto.dylib.hidden" || true
-}
-restore_mamp_ssl() {
-  [ -f "$MAMPLIB/lib/libssl.dylib.hidden" ]    && mv "$MAMPLIB/lib/libssl.dylib.hidden"    "$MAMPLIB/lib/libssl.dylib"    || true
-  [ -f "$MAMPLIB/lib/libcrypto.dylib.hidden" ] && mv "$MAMPLIB/lib/libcrypto.dylib.hidden" "$MAMPLIB/lib/libcrypto.dylib" || true
-}
+# Shared helpers in lib-arch.sh; they test for symlinks, so a dangling
+# libssl.dylib is still hidden and restored correctly.
+hide_mamp_ssl()    { hide_openssl_dylibs "$MAMPLIB/lib"; }
+restore_mamp_ssl() { restore_openssl_dylibs "$MAMPLIB/lib"; }
 trap restore_mamp_ssl EXIT INT TERM
 
 # ── Download helpers ──────────────────────────────────────────────────────────
@@ -171,67 +176,60 @@ _build_ext_one() {
   if [ -f Makefile ]; then
     sed -i.bak -E 's/^([A-Z_]+_SHARED_LIBADD = .* -lpq)/\1 -lpgcommon -lpgport -lssl -lcrypto -lz/g' Makefile || true
   fi
+  # memcached: link the split-out hashkit library (see lib-arch.sh).
+  patch_hashkit_makefile "$srcdir" || return 1
+
   # imagick: libtool drops the static Magick coder objects unless force-loaded.
-  if [ -f Makefile ] && [[ "$(basename "$srcdir")" == imagick-* ]]; then
+  if [ -f Makefile ] && [[ "$(basename "$srcdir")" == *imagick-* ]]; then
     local IMAGICK_DEPS="-Wl,-force_load,$DEPS/lib/libMagickWand-7.Q16HDRI.a -Wl,-force_load,$DEPS/lib/libMagickCore-7.Q16HDRI.a $DEPS/lib/libjbig.a $DEPS/lib/libtiff.a $DEPS/lib/libfreetype.a $DEPS/lib/libjxl.a $DEPS/lib/libhwy.a $DEPS/lib/libbrotlienc.a $DEPS/lib/libbrotlidec.a $DEPS/lib/libbrotlicommon.a $DEPS/lib/libjxl_cms.a $DEPS/lib/libjxl_threads.a $DEPS/lib/libpng16.a $DEPS/lib/libdjvulibre.a $DEPS/lib/libjpeg.a $DEPS/lib/libwebpmux.a $DEPS/lib/libwebpdemux.a $DEPS/lib/libwebp.a $DEPS/lib/libsharpyuv.a -L$MAMPLIB/lib -llzma -lbz2 -lz -lzip -lm -lpthread -framework CoreFoundation"
     sed -i.bak -E "s|^IMAGICK_SHARED_LIBADD = .*|IMAGICK_SHARED_LIBADD = -Wl,-rpath,$DEPS/lib -L$DEPS/lib $IMAGICK_DEPS|" Makefile
   fi
   make -j$NCPU || return 1
-  if [ "$(uname)" = "Darwin" ]; then
-    log "    → Code-signing modules/*.so"
-    for so_file in modules/*.so; do
-      if [ -f "$so_file" ]; then
-        codesign --force --sign - "$so_file"
-      fi
-    done
+  # Normalize and sign the build-tree modules before installing them. Signing
+  # only after the copy leaves macOS rejecting the bundle on arm64
+  # ("CODESIGNING: Invalid Page"); normalizing first also means an unresolved
+  # dependency fails the build instead of shipping a module with a /tmp rpath.
+  if [ ! -d modules ]; then
+    err "    ✗ no modules were built in $srcdir"
+    return 1
   fi
-  if cp modules/*.so "$extdir/" 2>/dev/null; then
+  log "    → Normalizing + code-signing modules/*.so, then installing"
+  local install_rc=0
+  install_modules "$extdir" || install_rc=$?
+  if [ "$install_rc" -eq 0 ]; then
     log "    ✓ copied to $extdir"
-    # Sign the installed copies: signing only the build-tree module leaves
-    # macOS rejecting the copied bundle on arm64 ("CODESIGNING: Invalid Page").
-    if [ "$(uname)" = "Darwin" ]; then
-      for so_file in "$extdir"/*.so; do
-        [ -f "$so_file" ] && codesign --force --sign - "$so_file" 2>/dev/null || true
-      done
-      normalize_module_links "$extdir"
-    fi
+  elif [ "$install_rc" -eq 3 ] || [ "$install_rc" -eq 4 ]; then
+    return 1
   else
-    local local_dist="$(cd "$(dirname "$0")" && pwd)/dist/$(basename $phpdir)"
+    local local_dist="$SCRIPT_DIR/dist/$(basename "$phpdir")"
     mkdir -p "$local_dist"
-    cp modules/*.so "$local_dist/"
-    warn "    ! Permission denied writing to $extdir. Copied to $local_dist instead."
+    # normalize_module_links ran with signing off; install_name_tool invalidated
+    # any signature, so sign before this fallback copy is usable on arm64.
+    for f in modules/*.so; do
+      [ -f "$f" ] || continue
+      codesign --force --sign - "$f" 2>/dev/null || true
+    done
+    if cp modules/*.so "$local_dist/"; then
+      warn "    ! Could not write to $extdir. Copied to $local_dist instead."
+      return 0
+    fi
+    err "    ✗ could not copy modules to $extdir or $local_dist"
+    return 1
   fi
 }
 
-# Make a module fully self-contained: resolve @rpath deps to MAMP Library and
-# delete rpaths outside MAMP (build-only prefixes such as /tmp/.../ext-deps).
-normalize_module_links() {
-  local dir=$1 so dep base rp
-  for so in "$dir"/*.so; do
-    [ -f "$so" ] || continue
-    for dep in $(otool -L "$so" | awk '$1 ~ /^@rpath\// {print $1}'); do
-      base=$(basename "$dep")
-      if [ -e "$MAMPLIB/lib/$base" ]; then
-        install_name_tool -change "$dep" "$MAMPLIB/lib/$base" "$so" 2>/dev/null || true
-      fi
-    done
-    for rp in $(otool -l "$so" | awk '/LC_RPATH/{getline;getline;print $2}'); do
-      case "$rp" in
-        "$MAMPLIB"/*) ;;
-        *) install_name_tool -delete_rpath "$rp" "$so" 2>/dev/null || true ;;
-      esac
-    done
-    codesign --force --sign - "$so" 2>/dev/null || true
-  done
-}
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+TARGET="${1:-all}"
+preflight
 
-# Build extension for all PHP versions
+# Build extension for PHP 8.2-8.5
 build_ext_both() {
-  local srcdir=$1 configure_args="${2:-}"
-  _build_ext_one "$PHP82" "$EXT82" "$srcdir" "$configure_args"
-  _build_ext_one "$PHP83" "$EXT83" "$srcdir" "$configure_args"
-  _build_ext_one "$PHP84" "$EXT84" "$srcdir" "$configure_args"
-  _build_ext_one "$PHP85" "$EXT85" "$srcdir" "$configure_args"
+  local srcdir=$1 configure_args="${2:-}" rc=0
+  _build_ext_one "$PHP82" "$EXT82" "$srcdir" "$configure_args" || rc=$?
+  _build_ext_one "$PHP83" "$EXT83" "$srcdir" "$configure_args" || rc=$?
+  _build_ext_one "$PHP84" "$EXT84" "$srcdir" "$configure_args" || rc=$?
+  _build_ext_one "$PHP85" "$EXT85" "$srcdir" "$configure_args" || rc=$?
+  return $rc
 }
 
 # Build extension for PHP 8.5 only
@@ -254,6 +252,7 @@ try_build() {
   else
     warn "✗ $name FAILED — skipping, check output above"
   fi
+  return 0
 }
 
 # ── PHASE 1: C Library Dependencies ───────────────────────────────────────────
@@ -292,7 +291,7 @@ build_libmcrypt() {
   cp /opt/local/share/autoconf/build-aux/config.guess config.guess 2>/dev/null || true
   chmod +x config.sub config.guess 2>/dev/null || true
   # clang compat: disable posix threads to avoid old pthread API issues
-  CFLAGS="-std=gnu89 -Wno-implicit-function-declaration -Wno-implicit-int" \
+  CFLAGS="-arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -std=gnu89 -Wno-implicit-function-declaration -Wno-implicit-int" \
   ./configure --prefix="$DEPS" --enable-static --disable-shared \
     --disable-posix-threads
   make -j$NCPU && make install
@@ -312,6 +311,12 @@ build_libmemcached() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_ARCHITECTURES=$ARCH
   make -j$NCPU && make install
+  # 1.1.4's pkg-config omits the split-out static hashkit library; without it
+  # the memcached module binds hashkit_* to 0x0 and crashes on first use.
+  local pc="$DEPS/lib/pkgconfig/libmemcached.pc"
+  if [ -f "$pc" ] && ! grep -q -- '-lhashkit' "$pc"; then
+    sed -i.bak -E 's|^(Libs: .*)$|\1 -lhashkit|' "$pc"
+  fi
 }
 
 build_libpq() {
@@ -328,7 +333,7 @@ build_libpq() {
     --without-zlib \
     CPPFLAGS="-I$MAMPLIB/include" \
     LDFLAGS="-L$MAMPLIB/lib" \
-    CFLAGS="-arch $ARCH -Wno-unguarded-availability-new"
+    CFLAGS="-arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -Wno-unguarded-availability-new"
   # Build only static libpq.a — skip dylib (dylib check fails: OpenSSL calls atexit)
   make -j$NCPU -C src/interfaces/libpq libpq.a
   # Manual install — avoid 'make install' which triggers dylib build+check
@@ -568,10 +573,53 @@ build_igbinary() {
   log "  igbinary.h installed to PHP include dirs"
 }
 
+# oauth 2.0.10 treats zend_hash_get_current_key_ex() as returning FAILURE and
+# compares the authorization length against sizeof() instead of sizeof()-1.
+# Both bugs exist on every PHP version, so every oauth build patches its copy.
+patch_oauth_tree() {
+  local DIR=$1
+  python3 - "$DIR/provider.c" "$DIR/oauth.c" <<'PYPATCH' || return 1
+import sys
+patches = {
+    "provider.c": [
+        ("zend_hash_get_current_key_ex(ht, &key, &num_key, &hpos)!=FAILURE",
+         "zend_hash_get_current_key_ex(ht, &key, &num_key, &hpos) == HASH_KEY_IS_STRING"),
+        ("if (FAILURE != zend_hash_get_current_key_ex(HASH_OF(&retval), &key, &num_key, &hpos)",
+         "if (HASH_KEY_IS_STRING == zend_hash_get_current_key_ex(HASH_OF(&retval), &key, &num_key, &hpos)"),
+        ('ZSTR_LEN(key) == sizeof("authorization") &&',
+         'ZSTR_LEN(key) == sizeof("authorization") - 1 &&'),
+        ('sizeof("HTTP_AUTHORIZATION"))) == NULL',
+         'sizeof("HTTP_AUTHORIZATION") - 1)) == NULL'),
+        ('"oauth_problem=unknown_problem&code=%lu", lcode',
+         '"oauth_problem=unknown_problem&code=%lu", (unsigned long) lcode'),
+    ],
+    "oauth.c": [
+        ("&& soo->last_location_header)",
+         "&& soo->last_location_header[0] != '\\0')"),
+        ("\t\tzend_hash_get_current_key_ex(oauth_args, &cur_key, &num_key, &pos);",
+         "\t\tif (zend_hash_get_current_key_ex(oauth_args, &cur_key, &num_key, &pos) != HASH_KEY_IS_STRING) {\n\t\t\tcontinue;\n\t\t}"),
+    ],
+}
+for path in sys.argv[1:]:
+    name = path.rsplit("/", 1)[-1]
+    s = open(path).read()
+    for old, new in patches[name]:
+        if old not in s:
+            sys.exit("%s patch anchor missing: %s" % (name, old[:60]))
+        s = s.replace(old, new)
+    open(path, "w").write(s)
+PYPATCH
+}
+
 build_oauth() {
   log "── oauth $OAUTH_VER ──"
   fetch_pecl "oauth" "$OAUTH_VER"
-  build_ext_both "$SRC/oauth-$OAUTH_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER") || return 1
+  # PHP 8.6 removed XtOffsetOf; offsetof is the standard equivalent (harmless earlier).
+  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
+  patch_oauth_tree "$DIR" || return 1
+  build_ext_both "$DIR"
 }
 
 build_redis() {
@@ -618,7 +666,8 @@ build_ssh2_ext() {
 build_mcrypt_ext() {
   log "── mcrypt $MCRYPT_VER ──"
   fetch_pecl "mcrypt" "$MCRYPT_VER"
-  local DIR="$SRC/mcrypt-$MCRYPT_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/mcrypt-$MCRYPT_VER") || return 1
   # php_rand.h removed in PHP 8.4 — create compat shim if missing
   for phpdir in "$PHP83" "$PHP84" "$PHP85"; do
     local rand_h="$phpdir/include/php/ext/standard/php_rand.h"
@@ -639,7 +688,8 @@ build_memcached_ext() {
 build_imagick_ext() {
   log "── imagick $IMAGICK_VER ──"
   fetch_pecl "imagick" "$IMAGICK_VER"
-  local DIR="$SRC/imagick-$IMAGICK_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/imagick-$IMAGICK_VER") || return 1
   # PHP 8.4 removed php_strtolower — patch with inline compat macro
   if grep -q "php_strtolower" "$DIR/imagick.c" 2>/dev/null; then
     sed -i.bak 's/php_strtolower(\([^,]*\), \([^)]*\))/zend_str_tolower_copy(\1, \1, \2)/g' "$DIR/imagick.c" || true
@@ -654,8 +704,8 @@ build_imagick_ext() {
 build_yaz_ext() {
   log "── yaz $YAZ_VER ──"
   fetch_pecl "yaz" "$YAZ_VER"
-  # --with-yaz expects the dir containing bin/yaz-config
-  build_ext_both "$SRC/yaz-$YAZ_VER" "--with-yaz=$MAMPLIB"
+  # --with-yaz expects the prefix containing bin/yaz-config (build_libyaz -> $DEPS)
+  build_ext_both "$SRC/yaz-$YAZ_VER" "--with-yaz=$DEPS"
 }
 
 build_sysv_ext() {
@@ -910,7 +960,14 @@ build_ssh2_85() {
 }
 
 _build_apcu_85()           { fetch_pecl "apcu" "$APCU_VER";                   build_ext_85only "$SRC/apcu-$APCU_VER"; }
-_build_oauth_85()          { fetch_pecl "oauth" "$OAUTH_VER85";               build_ext_85only "$SRC/oauth-$OAUTH_VER85"; }
+_build_oauth_85() {
+  fetch_pecl "oauth" "$OAUTH_VER85"
+  local DIR
+  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER85") || return 1
+  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
+  patch_oauth_tree "$DIR" || return 1
+  build_ext_85only "$DIR"
+}
 _build_uploadprogress_85() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_85only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
 _build_xdebug_85()         { fetch_pecl "xdebug" "$XDEBUG_VER85"; ZLIB_CFLAGS="-I$MAMPLIB/include" ZLIB_LIBS="-L$MAMPLIB/lib -lz" CPPFLAGS="-I$MAMPLIB/include" LDFLAGS="-L$MAMPLIB/lib" build_ext_85only "$SRC/xdebug-$XDEBUG_VER85"; }
 _build_redis_85()          { fetch_pecl "redis" "$REDIS_VER";                 build_ext_85only "$SRC/redis-$REDIS_VER" "--enable-redis-igbinary"; }
@@ -918,7 +975,8 @@ _build_yaml_85()           { fetch_pecl "yaml" "$YAML_VER";                   bu
 _build_memcached_85()      { fetch_pecl "memcached" "$MEMCACHED_VER85";       build_ext_85only "$SRC/memcached-$MEMCACHED_VER85" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"; }
 _build_imagick_85() {
   fetch_pecl "imagick" "$IMAGICK_VER"
-  local DIR="$SRC/imagick-$IMAGICK_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/imagick-$IMAGICK_VER") || return 1
   if grep -q "php_strtolower" "$DIR/imagick.c" 2>/dev/null; then
     sed -i.bak 's/php_strtolower(\([^,]*\), \([^)]*\))/zend_str_tolower_copy(\1, \1, \2)/g' "$DIR/imagick.c" || true
     if grep -q "php_strtolower" "$DIR/imagick.c"; then
@@ -948,11 +1006,54 @@ build_all_ext_85only() {
 # Run these AFTER building PHP 8.6 via build-php-mamp.sh.
 # Usage: ./build-mamp-ext.sh ext86
 
+# redis/memcached are built with the igbinary serializer (8.6). The header is
+# not enough: the module itself must exist, or PHP cannot resolve igbinary_* at
+# load time (configure-mamp-ini.py only enables .so files that exist).
+igbinary_ready_86() {
+  [ -f "$PHP86/include/php/ext/igbinary/igbinary.h" ] && [ -f "$EXT86/igbinary.so" ]
+}
+
+IGBINARY_FAILED_86=0
+ensure_igbinary_86() {
+  igbinary_ready_86 && return 0
+  [ "$IGBINARY_FAILED_86" -eq 0 ] || return 1
+  log "  igbinary missing — building it first"
+  if ! build_igbinary_86; then
+    IGBINARY_FAILED_86=1
+    return 1
+  fi
+}
+
 build_igbinary_86() {
   log "── igbinary $IGBINARY_VER (PHP 8.6 only) ──"
   fetch_pecl "igbinary" "$IGBINARY_VER"
-  build_ext_86only "$SRC/igbinary-$IGBINARY_VER" || return 1
-  local igbinary_h="$SRC/igbinary-$IGBINARY_VER/src/php7/igbinary.h"
+  local DIR
+  DIR=$(workcopy "$SRC/igbinary-$IGBINARY_VER") || return 1
+python3 - "$DIR/src/php7/igbinary.c" <<'PYPATCH' || return 1
+import sys
+p = sys.argv[1]
+s = open(p).read()
+repl = [
+    ("const char* user_func_name;", "zend_string *user_func_name;"),
+    ("(user_func_name == NULL) || (user_func_name[0] == '\\0')",
+     "(user_func_name == NULL) || (ZSTR_LEN(user_func_name) == 0)"),
+    ("ZVAL_STRING(&user_func, user_func_name);",
+     "ZVAL_STR_COPY(&user_func, user_func_name);"),
+    ('"Function %s() hasn\'t defined the class it was called for", PG(unserialize_callback_func)',
+     '"Function %s() hasn\'t defined the class it was called for", ZSTR_VAL(user_func_name)'),
+]
+for old, new in repl:
+    if old not in s:
+        sys.exit("igbinary 8.6 patch anchor missing: " + old[:60])
+    s = s.replace(old, new, 1)
+for fn in ("16", "32", "64"):
+    old = "zend_always_inline static int igbinary_serialize%s(" % fn
+    if old in s:
+        s = s.replace(old, "zend_always_inline static int __attribute__((unused)) igbinary_serialize%s(" % fn)
+open(p, "w").write(s)
+PYPATCH
+  build_ext_86only "$DIR" || return 1
+  local igbinary_h="$DIR/src/php7/igbinary.h"
   local inc="$PHP86/include/php/ext/igbinary"
   mkdir -p "$inc"
   cp "$igbinary_h" "$inc/igbinary.h"
@@ -962,7 +1063,8 @@ build_igbinary_86() {
 build_mcrypt_ext_86() {
   log "── mcrypt $MCRYPT_VER (PHP 8.6 only) ──"
   fetch_pecl "mcrypt" "$MCRYPT_VER"
-  local DIR="$SRC/mcrypt-$MCRYPT_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/mcrypt-$MCRYPT_VER") || return 1
   # PHP 8.6 changed the stream-filter vtable; mcrypt_filter.c no longer compiles.
   # Drop it and its registrations — mcrypt_encrypt/decrypt remain.
   sed -i.bak 's/mcrypt.c mcrypt_filter.c/mcrypt.c/' "$DIR/config.m4"
@@ -1000,14 +1102,16 @@ build_pgsql_ext_86() {
 build_ssh2_86() {
   log "── ssh2 $SSH2_VER (PHP 8.6 only) ──"
   fetch_pecl "ssh2" "$SSH2_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/ssh2-$SSH2_VER") || return 1
   # PHP 8.6 removed zval_is_true()/zval_dtor(); upstream ssh2 1.5.0 still calls them.
   sed -i.bak -E 's/zval_is_true\(/zend_is_true(/g; s/zval_dtor\(/zval_ptr_dtor(/g' \
-    "$SRC/ssh2-$SSH2_VER"/*.c
+    "$DIR"/*.c
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
   export LIBS="-lssl -lcrypto"
   local rc=0
-  build_ext_86only "$SRC/ssh2-$SSH2_VER" "--with-ssh2=$DEPS" || rc=$?
+  build_ext_86only "$DIR" "--with-ssh2=$DEPS" || rc=$?
   unset LDFLAGS LIBS
   restore_mamp_ssl
   return $rc
@@ -1016,51 +1120,82 @@ build_ssh2_86() {
 build_apcu_86() {
   log "── apcu $APCU_VER (PHP 8.6 only) ──"
   fetch_pecl "apcu" "$APCU_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/apcu-$APCU_VER") || return 1
   # php_verror() lost its docref parameter in PHP 8.6.
   sed -i.bak 's/php_verror(NULL, "", verbosity, format, args)/php_verror(NULL, verbosity, format, args)/' \
-    "$SRC/apcu-$APCU_VER/apc.c"
-  build_ext_86only "$SRC/apcu-$APCU_VER"
+    "$DIR/apc.c"
+  build_ext_86only "$DIR"
 }
 build_oauth_86() {
   log "── oauth $OAUTH_VER85 (PHP 8.6 only) ──"
   fetch_pecl "oauth" "$OAUTH_VER85"
-  local DIR="$SRC/oauth-$OAUTH_VER85"
+  local DIR
+  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER85") || return 1
   # PHP 8.6 removed the XtOffsetOf macro; offsetof is the standard equivalent.
   sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
+  patch_oauth_tree "$DIR" || return 1
   build_ext_86only "$DIR"
 }
 _build_uploadprogress_86() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_86only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
 build_xdebug_86() {
-  log "── xdebug $XDEBUG_VER85 (PHP 8.6 only) ──"
-  fetch_pecl "xdebug" "$XDEBUG_VER85"
-  local DIR="$SRC/xdebug-$XDEBUG_VER85"
-  # 3.5.3 works on 8.6 but refuses to configure; widen both version gates.
-  sed -i.bak -e 's/< 8\.6\.0/< 8.7.0/g' -e 's/-ge "80600"/-ge "80700"/g' "$DIR/config.m4"
-  # 8.6's ZSTR_INIT_LITERAL requires a literal; xdebug passes a char*.
-  sed -i.bak 's/ZSTR_INIT_LITERAL(tmp_name, false)/zend_string_init(tmp_name, strlen(tmp_name), false)/g' \
-    "$DIR/src/profiler/profiler.c"
+  log "── xdebug $XDEBUG_VER86 (PHP 8.6 only) ──"
+  # Alpha only ships from xdebug.org; PECL tops out at 3.5.3. It already
+  # accepts PHP 8.6 (< 8.7) and carries the 80600 API fixes, so no patching.
+  fetch_tar "https://xdebug.org/files/xdebug-$XDEBUG_VER86.tgz" "xdebug-$XDEBUG_VER86"
   ZLIB_CFLAGS="-I$MAMPLIB/include" ZLIB_LIBS="-L$MAMPLIB/lib -lz" \
     CPPFLAGS="-I$MAMPLIB/include" LDFLAGS="-L$MAMPLIB/lib" \
-    build_ext_86only "$DIR"
+    build_ext_86only "$SRC/xdebug-$XDEBUG_VER86"
 }
 build_redis_86() {
   log "── redis $REDIS_VER (PHP 8.6 only) ──"
   fetch_pecl "redis" "$REDIS_VER"
-  local DIR="$SRC/redis-$REDIS_VER"
+  ensure_igbinary_86 || return 1
+  local DIR
+  DIR=$(workcopy "$SRC/redis-$REDIS_VER") || return 1
   # Removed PHP 8.6 macros are supplied by php86-compat.h (force-included).
   # Clean up double invocations left by older sed-based attempts.
   sed -i.bak -E 's/zend_wrong_param_count\(\)\(\)/zend_wrong_param_count()/g' "$DIR"/*.c
   # PHP 8.6 session handlers take zend_string* (save_path/key/val).
-  sed -i.bak -E 's/strlen\(save_path\)/ZSTR_LEN(save_path)/g; s/save_path\[i\]/ZSTR_VAL(save_path)[i]/g; s/save_path\[j\]/ZSTR_VAL(save_path)[j]/g; s/estrndup\(save_path\+i/estrndup(ZSTR_VAL(save_path)+i/g; s/php_url_parse_ex\(save_path\+i/php_url_parse_ex(ZSTR_VAL(save_path)+i/g; s/estrdup\(save_path\)/estrdup(ZSTR_VAL(save_path))/g' \
+  sed -i.bak -E 's/strlen\(save_path\)/ZSTR_LEN(save_path)/g; s/save_path\[i\]/ZSTR_VAL(save_path)[i]/g; s/save_path\[j\]/ZSTR_VAL(save_path)[j]/g; s/estrndup\(save_path\+i/estrndup(ZSTR_VAL(save_path)+i/g; s/php_url_parse_ex\(save_path\+i/php_url_parse_ex(ZSTR_VAL(save_path)+i/g; s/redis_strncmp\(save_path\+i/redis_strncmp(ZSTR_VAL(save_path)+i/g; s/estrdup\(save_path\)/estrdup(ZSTR_VAL(save_path))/g' \
     "$DIR/redis_session.c"
-  # igbinary does not build on 8.6, so no igbinary serializer support here
-  build_ext_86only "$DIR"
+  # igbinary builds on 8.6 now (see build_igbinary_86), so enable the serializer
+  # to match the 8.2-8.5 builds; igbinary.h is installed before this runs.
+  build_ext_86only "$DIR" --enable-redis-igbinary
 }
 _build_yaml_86()           { fetch_pecl "yaml" "$YAML_VER";                   build_ext_86only "$SRC/yaml-$YAML_VER" "--with-yaml=$DEPS"; }
-_build_memcached_86()      { fetch_pecl "memcached" "$MEMCACHED_VER85";       build_ext_86only "$SRC/memcached-$MEMCACHED_VER85" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"; }
+_build_memcached_86() {
+  log "── memcached $MEMCACHED_VER85 (PHP 8.6 only) ──"
+  fetch_pecl "memcached" "$MEMCACHED_VER85"
+  ensure_igbinary_86 || return 1
+  local DIR
+  DIR=$(workcopy "$SRC/memcached-$MEMCACHED_VER85") || return 1
+  # PHP 8.6's PS_OPEN_FUNC passes save_path as zend_string*; this extension
+  # still passed it to strstr/memcached_servers_parse (const char*) and to a
+  # %s format, so every parsed path started inside the zend_string header.
+python3 - "$DIR/php_memcached_session.c" <<'PYPATCH' || return 1
+import sys
+p = sys.argv[1]
+s = open(p).read()
+repl = [
+    ("PS_OPEN_FUNC(memcached)\n{\n\tmemcached_st *memc   = NULL;",
+     "PS_OPEN_FUNC(memcached)\n{\n\tmemcached_st *memc   = NULL;\n\tconst char *save_path_str = ZSTR_VAL(save_path);"),
+    ('strstr(save_path, "PERSISTENT=")', 'strstr(save_path_str, "PERSISTENT=")'),
+    ("memcached_servers_parse(save_path)", "memcached_servers_parse(save_path_str)"),
+    ('"memc-session:%s", save_path', '"memc-session:%s", save_path_str'),
+]
+for old, new in repl:
+    if old not in s:
+        sys.exit("memcached 8.6 patch anchor missing: " + old[:60])
+    s = s.replace(old, new, 1)
+open(p, "w").write(s)
+PYPATCH
+  build_ext_86only "$DIR" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"
+}
 _build_imagick_86() {
   fetch_pecl "imagick" "$IMAGICK_VER"
-  local DIR="$SRC/imagick-$IMAGICK_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/imagick-$IMAGICK_VER") || return 1
   if grep -q "php_strtolower" "$DIR/imagick.c" 2>/dev/null; then
     sed -i.bak 's/php_strtolower(\([^,]*\), \([^)]*\))/zend_str_tolower_copy(\1, \1, \2)/g' "$DIR/imagick.c" || true
     if grep -q "php_strtolower" "$DIR/imagick.c"; then
@@ -1073,6 +1208,7 @@ _build_imagick_86() {
 build_all_ext_86only() {
   # igbinary first — redis/memcached depend on its headers
   try_build igbinary       build_igbinary_86
+  igbinary_ready_86 || IGBINARY_FAILED_86=1
   try_build apcu           build_apcu_86
   try_build oauth          build_oauth_86
   try_build uploadprogress _build_uploadprogress_86
@@ -1086,10 +1222,6 @@ build_all_ext_86only() {
   try_build imagick        _build_imagick_86
   try_build pgsql          build_pgsql_ext_86
 }
-
-# ── Dispatch ──────────────────────────────────────────────────────────────────
-TARGET="${1:-all}"
-preflight
 
 case "$TARGET" in
   # C deps
@@ -1141,6 +1273,7 @@ case "$TARGET" in
   pgsql)          build_pgsql_ext ;;
   ext)            build_all_ext ;;
   ext85)          build_all_ext_85only ;;
+  oauth85)        _build_oauth_85 ;;
   ext86)          build_all_ext_86only ;;
 
   all)

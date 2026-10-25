@@ -18,7 +18,8 @@ BUILD="/tmp/php-build-${USER:-mamp}"
 LEGACY="$BUILD/legacy-deps"
 SRC="$BUILD/legacy-src"
 BACKUP="$BUILD/legacy-backup"
-ARCH=$(uname -m)
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$SCRIPT_DIR/lib-arch.sh"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 NCPU=$(sysctl -n hw.ncpu)
 STAMP=$(date +%Y%m%d-%H%M%S)
@@ -43,17 +44,8 @@ restore_onig() {
   fi
 }
 
-hide_ssl() {
-  for f in libssl.dylib libcrypto.dylib; do
-    [ -L "$MAMP/lib/$f" ] && mv "$MAMP/lib/$f" "$MAMP/lib/$f.hidden"
-  done
-}
-restore_ssl() {
-  for f in libssl.dylib libcrypto.dylib; do
-    [ -L "$MAMP/lib/$f.hidden" ] && mv "$MAMP/lib/$f.hidden" "$MAMP/lib/$f"
-  done
-  return 0
-}
+hide_ssl()    { hide_openssl_dylibs "$MAMP/lib"; }
+restore_ssl() { restore_openssl_dylibs "$MAMP/lib"; }
 trap "restore_ssl; restore_onig" EXIT
 
 build_openssl() {

@@ -11,7 +11,8 @@ set -e
 VERSION="${1:-1.3.2}"
 MAMP=/Applications/MAMP/Library
 BUILD="/tmp/php-build-${USER:-mamp}/zlib-${VERSION}"
-ARCH=$(uname -m)
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 
 # Known-good checksum for 1.3.2 (zlib.net)
@@ -59,7 +60,6 @@ install -m 644 libz.a                    "$MAMP/lib/libz.a"
 install -m 755 "libz.$VERSION.dylib"     "$MAMP/lib/libz.$VERSION.dylib"
 ln -sfn "libz.$VERSION.dylib"            "$MAMP/lib/libz.1.dylib"
 ln -sfn "libz.$VERSION.dylib"            "$MAMP/lib/libz.dylib"
-ln -sfn "libz.$VERSION.dylib"            "$MAMP/lib/libz.1.$VERSION.dylib"
 install -m 644 zlib.h zconf.h            "$MAMP/include/"
 install -m 644 zlib.3                    "$MAMP/share/man/man3/"
 # pkgconfig is optional; skip when the directory is not writable
@@ -67,7 +67,7 @@ if [ -w "$MAMP/lib/pkgconfig" ]; then
   install -m 644 zlib.pc "$MAMP/lib/pkgconfig/"
 fi
 
-# Ad-hoc sign the new dylib (arm64 requires a valid signature)
+# Ad-hoc sign the new dylib (required on arm64, harmless on Intel)
 codesign --force --sign - "$MAMP/lib/libz.$VERSION.dylib" 2>/dev/null || true
 
 echo "==> Verify:"

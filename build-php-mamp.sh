@@ -14,13 +14,20 @@
 
 set -e
 VERSION="$1"
+if [ -z "$VERSION" ]; then
+  echo "Usage: $0 <version>"; exit 1
+fi
 # Source version keeps any RC/beta suffix (tarball and build dir); the install dir
 # must be numeric-only. MAMP Pro only lists dirs matching
 #   ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
 # so installing 8.6.0RC4 as php8.6.0RC4 leaves the build invisible in the GUI.
 INSTALL_VERSION=$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
 MAMP=/Applications/MAMP/Library
+START_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$START_DIR/lib-arch.sh"
+# Fail fast if the static MAMP libraries came from the other architecture.
+require_native_mamp_libs "$MAMP"
 BUILD="/tmp/php-build-${USER:-mamp}"
 SRC="${BUILD}/php-${VERSION}"
 PREFIX="/Applications/MAMP/bin/php/php${INSTALL_VERSION}"
@@ -35,10 +42,6 @@ if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
   fi
 fi
 echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
-
-if [ -z "$VERSION" ]; then
-  echo "Usage: $0 <version>"; exit 1
-fi
 
 # Verify OpenSSL 1.1+ is present in MAMP before proceeding
 OSSL_VER=$(grep -r "OPENSSL_VERSION_NUMBER" "$MAMP/include/openssl/opensslv.h" 2>/dev/null | head -1)
@@ -90,37 +93,26 @@ MAJOR_MINOR="${INSTALL_VERSION%.*}"
 XMLRPC_FLAG=""
 # xmlrpc was removed from PHP core in 8.3 (PECL extension only)
 
-# PHP 8.4+ removed --with-zlib-dir and --with-kerberos
+# PHP 8.4+ removed --with-zlib-dir and --with-kerberos; PHP 8.5+ removed --enable-opcache
 ZLIB_DIR_FLAG="--with-zlib-dir=$MAMP"
 KERBEROS_FLAG="--with-kerberos"
-KERBEROS_VAR_FLAGS="KERBEROS_CFLAGS=\"-I/usr/include\" KERBEROS_LIBS=\"-lkrb5\""
+KERBEROS_ARGS=(KERBEROS_CFLAGS="-I/usr/include" KERBEROS_LIBS="-lkrb5")
+OPCACHE_ARGS=(--enable-opcache)
 if [[ "$MAJOR_MINOR" == "8.4" ]] || [[ "$MAJOR_MINOR" == "8.5" ]] || [[ "$MAJOR_MINOR" == "8.6" ]]; then
   ZLIB_DIR_FLAG=""
   KERBEROS_FLAG=""
-  KERBEROS_VAR_FLAGS=""
+  KERBEROS_ARGS=()
+fi
+if [[ "$MAJOR_MINOR" == "8.5" ]] || [[ "$MAJOR_MINOR" == "8.6" ]]; then
+  # opcache is compiled into PHP core from 8.5 on; --enable-opcache no longer exists.
+  OPCACHE_ARGS=()
 fi
 
-# Hide old OpenSSL dylib symlinks — linker must find only the .a (OpenSSL 3) files.
-# PHP_EVAL_LIBLINE emits -lssl -lcrypto; without hiding the symlinks the linker
-# would pick libssl.dylib -> libssl.1.0.0.dylib (old OpenSSL) instead of libssl.a.
-LIBSSL_SYM="$MAMP/lib/libssl.dylib"
-LIBCRYPTO_SYM="$MAMP/lib/libcrypto.dylib"
-LIBSSL_MOVED=0; LIBCRYPTO_MOVED=0
-
-restore_ossl_symlinks() {
-  [ $LIBSSL_MOVED -eq 1 ]    && mv "$MAMP/lib/libssl.dylib.hidden"    "$LIBSSL_SYM"    2>/dev/null || true
-  [ $LIBCRYPTO_MOVED -eq 1 ] && mv "$MAMP/lib/libcrypto.dylib.hidden" "$LIBCRYPTO_SYM" 2>/dev/null || true
-}
-trap restore_ossl_symlinks EXIT
-
-if [ -L "$LIBSSL_SYM" ]; then
-  mv "$LIBSSL_SYM" "$MAMP/lib/libssl.dylib.hidden"; LIBSSL_MOVED=1
-  echo "==> Hid libssl.dylib symlink for static linking"
-fi
-if [ -L "$LIBCRYPTO_SYM" ]; then
-  mv "$LIBCRYPTO_SYM" "$MAMP/lib/libcrypto.dylib.hidden"; LIBCRYPTO_MOVED=1
-  echo "==> Hid libcrypto.dylib symlink for static linking"
-fi
+# Hide MAMP's OpenSSL 1.0 dylibs so the linker finds only the static OpenSSL 3
+# archives; the shared helpers restore them from the backup on exit.
+trap 'restore_openssl_dylibs "$MAMP/lib"' EXIT
+hide_openssl_dylibs "$MAMP/lib"
+echo "==> Hid OpenSSL dylibs for static linking (restored on exit)"
 
 mkdir -p "$BUILD"
 if [ ! -d "$SRC" ]; then
@@ -165,6 +157,13 @@ fi
 
 cd "$SRC"
 
+# Release tarballs ship a generated configure; git-archive sources do not.
+# Also regenerate if the extracted configure is not executable (aborted unpack).
+if [ ! -f "./configure" ] || [ ! -x "./configure" ]; then
+  echo "==> Generating configure (buildconf) for git archive source..."
+  PATH="/opt/local/bin:$PATH" ./buildconf --force
+fi
+
 ./configure \
   --with-apxs2=$MAMP/bin/apxs \
   --with-zlib $ZLIB_DIR_FLAG \
@@ -186,7 +185,7 @@ cd "$SRC"
   --with-pdo-mysql=mysqlnd \
   --with-openssl=$MAMP \
   ac_cv_func_RAND_egd=no \
-  --enable-opcache \
+  ${OPCACHE_ARGS[@]+"${OPCACHE_ARGS[@]}"} \
   --with-tidy=shared,$MAMP \
   --with-readline=$MAMP \
   --with-mhash \
@@ -212,8 +211,7 @@ cd "$SRC"
   CFLAGS="-arch $ARCH" \
   CXXFLAGS="-arch $ARCH -isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" \
   LDFLAGS="-arch $ARCH -L$MAMP/lib" \
-  KERBEROS_CFLAGS="-I/usr/include" \
-  KERBEROS_LIBS="-lkrb5" \
+  ${KERBEROS_ARGS[@]+"${KERBEROS_ARGS[@]}"} \
   SQLITE_CFLAGS=" " \
   SQLITE_LIBS="-lsqlite3" \
   JPEG_CFLAGS=" " \

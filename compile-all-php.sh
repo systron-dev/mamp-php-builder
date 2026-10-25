@@ -1,9 +1,14 @@
 #!/bin/bash
 set -e
+# bison/re2c from MacPorts are needed when PHP's parser/lexer are rebuilt.
+# They are added only to `make`, never to configure: a MacPorts pkg-config on
+# PATH could leak /opt/local libraries into the build.
 
 MAMP="/Applications/MAMP/Library"
 BUILD="/tmp/php-build-${USER:-mamp}"
 START_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib-arch.sh
+source "$START_DIR/lib-arch.sh"
 VERSIONS=("8.2.35" "8.3.36" "8.4.27" "8.5.12" "8.6.0RC4")
 # Optional: pass versions as arguments to build a subset, e.g. `./compile-all-php.sh 8.6.0RC4`
 if [ $# -gt 0 ]; then
@@ -20,6 +25,11 @@ if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
   fi
 fi
 echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
+
+# Hide old OpenSSL dylibs for static linking. restore_openssl_dylibs keys off
+# the .hidden backup, so a signal between `mv` and any flag cannot lose it.
+trap 'restore_openssl_dylibs "$MAMP/lib"' EXIT
+trap 'restore_openssl_dylibs "$MAMP/lib"; exit 130' INT TERM
 
 for version in "${VERSIONS[@]}"; do
   # MAMP Pro discovers versions via regex ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
@@ -38,34 +48,27 @@ for version in "${VERSIONS[@]}"; do
   fi
 
   echo "==> Hiding OpenSSL dylibs for static compilation"
-  LIBSSL_SYM="$MAMP/lib/libssl.dylib"
-  LIBCRYPTO_SYM="$MAMP/lib/libcrypto.dylib"
-  LIBSSL_MOVED=0; LIBCRYPTO_MOVED=0
-
-  if [ -L "$LIBSSL_SYM" ]; then
-    mv "$LIBSSL_SYM" "$MAMP/lib/libssl.dylib.hidden"
-    LIBSSL_MOVED=1
-  fi
-  if [ -L "$LIBCRYPTO_SYM" ]; then
-    mv "$LIBCRYPTO_SYM" "$MAMP/lib/libcrypto.dylib.hidden"
-    LIBCRYPTO_MOVED=1
-  fi
+  hide_openssl_dylibs "$MAMP/lib"
 
   # Compile PHP
   echo "==> Compiling PHP $version"
   cd "${BUILD}/php-${version}"
-  make -j$(sysctl -n hw.ncpu)
+  PATH="/opt/local/bin:$PATH" make -j$(sysctl -n hw.ncpu)
 
   echo "==> Restoring OpenSSL dylibs"
-  if [ $LIBSSL_MOVED -eq 1 ]; then
-    mv "$MAMP/lib/libssl.dylib.hidden" "$LIBSSL_SYM"
-  fi
-  if [ $LIBCRYPTO_MOVED -eq 1 ]; then
-    mv "$MAMP/lib/libcrypto.dylib.hidden" "$LIBCRYPTO_SYM"
-  fi
+  restore_openssl_dylibs "$MAMP/lib"
 
   echo "==> Installing PHP $version"
   make install
+
+  # Modules built by PHP's own configure (tidy, opcache-less 8.5+) are not
+  # touched by build-mamp-ext.sh; normalize and sign them here so no module
+  # ships with an @rpath or foreign linkage.
+  ext_dir=$(ls -d "/Applications/MAMP/bin/php/php${install_version}"/lib/php/extensions/* 2>/dev/null | head -1)
+  if [ -n "$ext_dir" ]; then
+    MAMPLIB="$MAMP/lib" normalize_module_links "$ext_dir"/*.so \
+      || echo "WARN: some modules in $ext_dir could not be normalized/signed" >&2
+  fi
 
   # Copy and sign Apache module libphp.so into the PHP version's directory
   # (MAMP GUI scans for and dynamically copies this file to switch versions)

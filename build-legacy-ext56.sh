@@ -1,7 +1,7 @@
 #!/bin/bash
-# Build PECL extensions for the legacy PHP 7.4 build.
+# Build PECL extensions for the legacy PHP 5.6 build.
 # Uses the shared static deps in $BUILD/ext-deps.
-# Usage: bash build-legacy-ext.sh [extension ...]
+# Usage: bash build-legacy-ext56.sh [extension ...]
 
 set -euo pipefail
 
@@ -10,9 +10,10 @@ MAMPLIB=$MAMP/lib
 BUILD="/tmp/php-build-${USER:-mamp}"
 DEPS="$BUILD/ext-deps"
 SRC="$BUILD/ext-src"
-PHP74="/Applications/MAMP/bin/php/php5.6.40"
-EXT74="$PHP74/lib/php/extensions/no-debug-non-zts-20131226"
-ARCH=$(uname -m)
+PHP56="/Applications/MAMP/bin/php/php5.6.40"
+EXT56="$PHP56/lib/php/extensions/no-debug-non-zts-20131226"
+# Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
+source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 NCPU=$(sysctl -n hw.ncpu)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -50,46 +51,62 @@ _build_one() {
   local srcdir=$1 args="${2:-}"
   log "  build $(basename "$srcdir")"
   cd "$srcdir"
-  "$PHP74/bin/phpize" --clean >/dev/null 2>&1 || true
-  "$PHP74/bin/phpize" >/dev/null
+  "$PHP56/bin/phpize" --clean >/dev/null 2>&1 || true
+  "$PHP56/bin/phpize" >/dev/null
   local libs_arg=()
   [ -n "${BUILD_LIBS:-}" ] && libs_arg=("LIBS=$BUILD_LIBS")
   env CPPFLAGS="${BUILD_CPPFLAGS:--I$MAMP/include -I$DEPS/include}" ${libs_arg[@]+"${libs_arg[@]}"} \
-    ./configure --with-php-config="$PHP74/bin/php-config" $args >/dev/null
+    ./configure --with-php-config="$PHP56/bin/php-config" $args >/dev/null
   if [ -f Makefile ] && [[ "$(basename "$srcdir")" == imagick-* ]]; then
     local IMAGICK_DEPS="-Wl,-force_load,$DEPS/lib/libMagickWand-7.Q16HDRI.a -Wl,-force_load,$DEPS/lib/libMagickCore-7.Q16HDRI.a $DEPS/lib/libjbig.a $DEPS/lib/libtiff.a $DEPS/lib/libfreetype.a $DEPS/lib/libjxl.a $DEPS/lib/libhwy.a $DEPS/lib/libbrotlienc.a $DEPS/lib/libbrotlidec.a $DEPS/lib/libbrotlicommon.a $DEPS/lib/libjxl_cms.a $DEPS/lib/libjxl_threads.a $DEPS/lib/libpng16.a $DEPS/lib/libdjvulibre.a $DEPS/lib/libjpeg.a $DEPS/lib/libwebpmux.a $DEPS/lib/libwebpdemux.a $DEPS/lib/libwebp.a $DEPS/lib/libsharpyuv.a -L$MAMPLIB -llzma -lbz2 -lz -lzip -lm -lpthread -framework CoreFoundation"
     sed -i.bak -E "s|^IMAGICK_SHARED_LIBADD = .*|IMAGICK_SHARED_LIBADD = -Wl,-rpath,$DEPS/lib -L$DEPS/lib $IMAGICK_DEPS|" Makefile
   fi
   if [ -f libtool ]; then
-    sed -i.bak 's/allow_undefined_flag=""/allow_undefined_flag="-Wl,-undefined,dynamic_lookup"/' libtool
+    # PHP 5.6's generated libtool may use "" or the flat_namespace default.
+    sed -i.bak -e 's/allow_undefined_flag=""/allow_undefined_flag="-Wl,-undefined,dynamic_lookup"/' \
+      -e 's|allow_undefined_flag="${wl}-flat_namespace ${wl}-undefined ${wl}suppress"|allow_undefined_flag="-Wl,-undefined,dynamic_lookup"|' \
+      libtool
+    if ! grep -q 'allow_undefined_flag="-Wl,-undefined,dynamic_lookup"' libtool; then
+      echo "ERROR: could not patch libtool for dynamic_lookup (build would mis-link)" >&2
+      return 1
+    fi
   fi
+  # memcached: link the split-out hashkit library (see lib-arch.sh).
+  patch_hashkit_makefile "$srcdir" || return 1
   make -j"$NCPU" >/dev/null
-  cp modules/*.so "$EXT74/"
-  for so in "$EXT74"/*.so; do codesign --force --sign - "$so" 2>/dev/null || true; done
+  # Normalize, install, and re-sign only the modules just built; the extension
+  # directory also holds prebuilt MAMP modules that must stay untouched.
+  install_modules "$EXT56/" || return 1
 }
 
 build_apcu() {
   fetch_pecl apcu "$APCU_VER"
   # shared ext-src may carry the 8.6 four-argument php_verror patch
+  local DIR
+  DIR=$(workcopy "$SRC/apcu-$APCU_VER") || return 1
   sed -i.bak 's/php_verror(NULL, verbosity, format, args)/php_verror(NULL, "", verbosity, format, args)/' \
-    "$SRC/apcu-$APCU_VER/apc.c"
-  _build_one "$SRC/apcu-$APCU_VER"
+    "$DIR/apc.c"
+  _build_one "$DIR"
 }
 
 build_redis() {
   fetch_pecl redis "$REDIS_VER"
-  # ext-src/redis may carry 8.6 zend_string session patches; 7.4 uses char*.
+  # ext-src/redis may carry 8.6 zend_string session patches; 5.6 uses char*.
+  local DIR
+  DIR=$(workcopy "$SRC/redis-$REDIS_VER") || return 1
   sed -i.bak -E 's/ZSTR_VAL\(save_path\)/save_path/g; s/ZSTR_LEN\(save_path\)/strlen(save_path)/g' \
-    "$SRC/redis-$REDIS_VER/redis_session.c"
-  _build_one "$SRC/redis-$REDIS_VER" "--enable-redis-igbinary"
+    "$DIR/redis_session.c"
+  _build_one "$DIR" "--enable-redis-igbinary"
 }
 
 build_oauth() {
   fetch_pecl oauth "$OAUTH_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER") || return 1
   sed -i.bak 's|ext/standard/php_smart_string.h|ext/standard/php_smart_str.h|' \
-    "$SRC/oauth-$OAUTH_VER/php_oauth.h"
+    "$DIR/php_oauth.h"
   BUILD_CPPFLAGS="-I$MAMP/include -I$DEPS/include" \
-    _build_one "$SRC/oauth-$OAUTH_VER"
+    _build_one "$DIR"
 }
 
 build_module() {
@@ -100,13 +117,15 @@ build_module() {
 
 build_igbinary() {
   build_module igbinary "$IGBINARY_VER"
-  mkdir -p "$PHP74/include/php/ext/igbinary"
-  cp "$SRC/igbinary-$IGBINARY_VER/src/php7/igbinary.h" "$PHP74/include/php/ext/igbinary/"
+  mkdir -p "$PHP56/include/php/ext/igbinary"
+  # PHP 5.6 uses the php5 header (TSRMLS_DC args, zval** unserialize);
+  # the php7 header breaks redis' igbinary serializer on 5.6.
+  cp "$SRC/igbinary-$IGBINARY_VER/src/php5/igbinary.h" "$PHP56/include/php/ext/igbinary/"
 }
 
 build_sysv() {
   local src="$BUILD/legacy-src/php-src-backports-PHP-5.6-security-backports-openssl11"
-  [ -d "$src" ] || { log "missing 7.4 source tree"; return 1; }
+  [ -d "$src" ] || { log "missing 5.6 source tree"; return 1; }
   for ext in sysvmsg sysvshm sysvsem shmop; do
     _build_one "$src/ext/$ext"
   done

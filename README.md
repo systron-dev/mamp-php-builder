@@ -48,7 +48,13 @@ Archives are arch-suffixed — binaries are not portable across architectures:
 | `-arm64` | Apple Silicon (native) |
 | `-x86_64` | Intel (native); Apple Silicon via Rosetta 2 |
 
-Intel archives must be built separately on an Intel Mac using the same scripts (arch auto-detected via `uname -m`).
+Intel archives must be built separately on an Intel Mac using the same scripts. The
+scripts always build **native only** — `arm64` on Apple Silicon, `x86_64` on Intel — by
+detecting the hardware (`hw.optional.arm64`), not the process architecture. Running a
+build from a Rosetta 2 shell therefore still produces an `arm64` build on Apple Silicon;
+universal binaries are not produced. `lib-arch.sh` also refuses prebuilt OpenSSL/zlib/curl static libraries and
+installed PHP binaries belonging to the other architecture, so the common
+mixed-tree mistakes fail fast; other libraries are caught at link time.
 
 ## Quick start
 
@@ -72,9 +78,7 @@ python3 configure-mamp-ini.py
 ./package-mamp-php.sh
 ```
 
-See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, dependency build order, OpenSSL dylib hiding, conf file generation, macOS code-signing, and all known gotchas.
-
-See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU Makefile fix, OpenSSL dylib hiding, conf file generation, macOS code-signing, and all known gotchas.
+See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, dependency build order, ICU Makefile fix, OpenSSL dylib hiding, conf file generation, macOS code-signing, and all known gotchas.
 
 ## Requirements
 
@@ -83,9 +87,9 @@ See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, ICU
 - MAMP 6.9 installed at `/Applications/MAMP`
 - MacPorts — build-time tools only; no MacPorts library is linked into the result
   ```bash
-  sudo port install pkgconfig autoconf libtool gettext wget git
+  sudo port install pkgconfig autoconf automake libtool cmake gettext wget git bison re2c
   ```
-  `cmake` is bootstrapped automatically by `build-mamp-ext.sh` / `build-deps-mamp.sh`
+  `cmake` is also bootstrapped automatically by `build-mamp-ext.sh` / `build-deps-mamp.sh`
   when missing. All linked libraries (OpenSSL, curl, zlib, ICU, etc.) are either shipped
   in MAMP Library or built from source by these scripts.
 

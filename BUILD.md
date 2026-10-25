@@ -11,7 +11,7 @@ MAMP PRO v6.9 no longer ships newer PHP packages — updates are v7.x-only. This
 Run this first in every shell session before following this guide:
 
 ```bash
-ARCH=$(uname -m)                     # arm64 on Apple Silicon, x86_64 on Intel
+source ./lib-arch.sh                 # sets ARCH from hardware (arm64 on Apple Silicon)
 BUILD="/tmp/php-build-${USER:-mamp}" # Build workspace directory
 ```
 
@@ -104,15 +104,23 @@ xcode-select --install
 ### MacPorts (build-time tools only)
 MacPorts supplies the build tools. No MacPorts library is linked into the result.
 ```bash
-sudo port install pkgconfig autoconf libtool gettext wget git bison re2c
+sudo port install pkgconfig autoconf automake libtool cmake gettext wget git bison re2c
 ```
-`cmake` is bootstrapped automatically into `$BUILD/cmake-bin` when missing. All linked
-libraries are shipped by MAMP or built from source by the scripts in this repo.
+`cmake` is also bootstrapped automatically into `$BUILD/cmake-bin` by
+`build-mamp-ext.sh` when missing. All linked libraries are shipped by MAMP or built
+from source by the scripts in this repo.
+
+Builds are **native only**: `arm64` on Apple Silicon, `x86_64` on Intel. `lib-arch.sh`
+determines `ARCH` from the hardware (`sysctl hw.optional.arm64`), so a Rosetta 2 shell
+does not switch the output architecture, and universal binaries are never produced.
+`require_native` aborts if `libssl.a`, `libcrypto.a`, `libz.a`, `libcurl.a` or an
+installed `bin/php` was built for the other architecture — rerun `build-zlib-mamp.sh` (libz) and
+`build-deps-mamp.sh all` (OpenSSL, curl, the rest) on the machine doing the build.
 
 It is also used to supply a modern `config.sub`/`config.guess` when building libmcrypt:
 ```bash
 # Check it exists — only needed if building mcrypt extension
-ls /opt/local/share/libtool/build-aux/config.sub
+ls /opt/local/share/autoconf/build-aux/config.sub
 ```
 
 > [!NOTE]
@@ -411,11 +419,11 @@ bash "$BUILD/build-mamp-ext.sh" sysv    # sysvsem + sysvshm + sysvmsg + shmop
 | mcrypt         | ✓      | ✓      | ✓      | ✓       | ✓       | 8.6: 1.0.9, stream filters removed, `php_rand.h` shim |
 | memcached      | ✓ 3.4.0| ✓ 3.4.0| ✓ 3.4.0| ✓ 3.4.0 | ✓ 3.4.0 | 8.6 builds with compat header                      |
 | oauth          | ✓ 2.0.10| ✓ 2.0.10| ✓ 2.0.10| ✓ 2.0.10| ✓ 2.0.10| 8.6: `XtOffsetOf` → `offsetof` patch              |
-| redis          | ✓      | ✓      | ✓      | ✓       | ✓ 6.3.0 | 8.6: session handlers patched for `zend_string*` args; no igbinary |
+| redis          | ✓      | ✓      | ✓      | ✓       | ✓ 6.3.0 | 8.6: session handlers patched for `zend_string*`; igbinary serializer enabled |
 | ssh2           | ✓      | ✓      | ✓      | ✓       | ✓       | OpenSSL static symbols; 1.5.0 needs PHP 8.6 API patch            |
 | tidy           | ✓      | ✓      | ✓      | ✓       | ✓       | Built shared by the PHP core configure             |
 | uploadprogress | ✓      | ✓      | ✓      | ✓       | ✓       | Builds on 8.6 with compat header                   |
-| xdebug         | ✓ 3.5.3| ✓ 3.5.3| ✓ 3.5.3| ✓ 3.5.3 | ✓ 3.5.3 | 8.6: version gates widened + profiler patch; disabled by default |
+| xdebug         | ✓ 3.5.3| ✓ 3.5.3| ✓ 3.5.3| ✓ 3.5.3 | ✓ 3.6.0a1| 8.6 uses 3.6.0alpha1 (xdebug.org, not PECL); disabled by default |
 | yaml           | ✓      | ✓      | ✓      | ✓       | ✓       | Builds on 8.6 with compat header                   |
 | opcache        | ✓      | ✓      | ✓      | static  | static  | Built into PHP 8.5+ & 8.6 — no .so; comment out ini|
 | pgsql          | ✓      | ✓      | ✓      | ✓       | ✓       | Needs `LIBS="-lpq -lssl -lcrypto -lz"`             |
@@ -467,23 +475,16 @@ If you wish to configure files manually or understand the underlying logic:
 - `extension_dir` path (correct version + API hash)
 - `zend_extension` paths for opcache and xdebug
 
-##### Extension policy (mirrors MAMP 8.2/8.3 reference defaults)
+##### Extension policy (matches `configure-mamp-ini.py`)
 
-**Always on** (hardcoded `extension=`):
-- `pgsql.so`, `pdo_pgsql.so`
-- apcu, igbinary, imagick, memcached, oauth, redis, tidy ← managed by MAMP PRO UI via `MAMP_xxx_MAMP` placeholders in `php.ini.temp`; hardcoded on in the generated live conf
+**Enabled by default** (uncommented `extension=` whenever the `.so` exists):
+- `apcu`, `igbinary`, `imagick`, `memcached`, `oauth`, `redis`, `tidy` ← also tagged with `MAMP_xxx_MAMP` placeholders in `php.ini.temp` so the MAMP PRO GUI can toggle them
+- `pgsql`, `pdo_pgsql`, `mcrypt`, `ssh2`, `yaml`, `uploadprogress`, `sysvsem`, `sysvshm`, `sysvmsg`, `shmop`
 
-**Commented out** (available, enable manually):
+**Commented out by default**:
 ```ini
 ;extension=imap.so          ; not built — c-client 2007f unmaintained (security)
-;extension=mcrypt.so        ; not in MAMP reference defaults
-;extension=ssh2.so          ; not in MAMP reference defaults
-;extension=uploadprogress.so; disabled in MAMP reference
-;extension=yaml.so          ; disabled in MAMP reference
-;extension=sysvsem.so       ; System V semaphores
-;extension=sysvshm.so       ; System V shared memory
-;extension=sysvmsg.so       ; System V message queues
-;extension=shmop.so         ; POSIX shared memory ops
+;zend_extension=".../xdebug.so" ; installed, enable manually when debugging
 ```
 
 #### pear.conf
@@ -628,7 +629,7 @@ MAMP's ICU 56 has versioned symbols (`u_sprintf_56`). Without `-licuio` in `EXTR
 
 libmcrypt 2.5.8's `config.sub` (from 2007) doesn't recognize modern Darwin kernel versions. On Apple Silicon it fails on `arm-apple-darwin`; on Intel with macOS 13+ it may fail on `x86_64-apple-darwin22+`. Replace with MacPorts version in both cases:
 ```bash
-cp /opt/local/share/libtool/build-aux/config.sub libmcrypt-2.5.8/config.sub
+cp /opt/local/share/autoconf/build-aux/config.sub libmcrypt-2.5.8/config.sub
 ```
 `build-mamp-ext.sh` does this automatically.
 
@@ -718,7 +719,7 @@ cat > /Applications/MAMP/bin/php/php8.5.12/include/php/ext/standard/php_smart_st
 EOF
 ```
 
-`build-mamp-ext.sh ext85` does **not** do this automatically — create the shim first.
+`build-mamp-ext.sh` creates this shim automatically for PHP 8.5 and 8.6 in `preflight()`.
 
 ### `php_random.h` moved
 
@@ -736,16 +737,15 @@ EOF
 ### Extension versions
 
 `zend_exception_get_default()` was removed in PHP 8.5; extensions calling it fail to compile.
-Current pins used for every PHP 8.2–8.5 build:
+Current pins used for every PHP 8.2–8.6 build:
 
 | Extension  | Version |
 |------------|---------|
-| xdebug     | 3.5.3   |
+| xdebug     | 3.5.3 (8.6: 3.6.0alpha1) |
 | oauth      | 2.0.10  |
 | memcached  | 3.4.0   |
 
-`build-mamp-ext.sh` applies these automatically. xdebug 3.5.x refuses PHP ≥ 8.6, so `ext86`
-skips it.
+`build-mamp-ext.sh` applies these automatically. For PHP 8.6, `ext86` fetches xdebug 3.6.0alpha1 (alpha, xdebug.org only) — it accepts PHP >= 8.2 < 8.7 and already contains the 8.6 API fixes, so no version-gate or profiler patches are needed. It is installed but disabled by default.
 
 ---
 
@@ -789,13 +789,13 @@ handles this with `php86-compat.h` (force-included) plus targeted patches:
 
 - **Compat header**: `XtOffsetOf`, `zval_dtor`, `zval_is_true`, `INI_STR/INT/FLT/BOOL`,
   `WRONG_PARAM_COUNT`, `php_hash_bin2hex`.
-- `xdebug` 3.5.3: both configure version gates widened and `ZSTR_INIT_LITERAL(tmp_name, …)`
-  replaced; loads normally, disabled by default.
+- `xdebug` 3.6.0alpha1 on 8.6: upstream support for PHP 8.6, no local patches; loads
+  normally, disabled by default. (8.5 still uses 3.5.3; legacy uses 3.1.6 on 7.4 and 2.5.5 on 5.6.)
 - `ssh2` 1.5.0: `zval_is_true`/`zval_dtor` replacements.
 - `oauth` 2.0.10: `XtOffsetOf` → `offsetof`.
 - `apcu` 5.1.24: `php_verror()` signature.
 - `mcrypt` 1.0.9: stream-filter code dropped (no `mcrypt.*` filters on 8.6).
-- `redis` 6.3.0: session handlers adapted to `zend_string*`; built without igbinary.
+- `redis` 6.3.0: session handlers adapted to `zend_string*`; igbinary serializer enabled.
 - `igbinary`, `uploadprogress`, `yaml`, `memcached`, `imagick`, `pgsql`, `pdo_pgsql`,
   `tidy`, and the System V IPC extensions all build and load.
 
@@ -819,10 +819,10 @@ MAMP does not include the Apache HTTPD build directory (containing `config_vars.
 During `make install` for PHP, `apxs` attempts to activate the module in `/Applications/MAMP/Library/conf/httpd.conf`. Since MAMP does not maintain its configuration files at this path, the command will fail:
 * **Fix:** Create a dummy file at `/Applications/MAMP/Library/conf/httpd.conf` populated with a placeholder directive preceded by a newline character (e.g. `\nLoadModule foo_module modules/mod_foo.so\n`). `apxs` parses this string regex pattern to locate insertion points; if it is not formatted exactly with a newline before `LoadModule`, the installation process will crash.
 
-### CXXFLAGS & System C++ Standard Library Overrides
+### CXXFLAGS & System C++ Standard Library Headers
 
-Do not specify `-isystem /Library/Developer/CommandLineTools/.../c++/v1` inside `CXXFLAGS`. Overriding standard C++ header lookups with absolute SDK paths disrupts standard C header resolution (like `<stdint.h>`), resulting in compile errors (e.g., `unknown type name int32_t`, `int8_t` or `UBool` definition issues in the `intl` extension). Let clang automatically resolve SDK headers:
-* **Fix:** Keep CXXFLAGS simple: `CXXFLAGS="-arch $ARCH"`.
+On modern macOS SDKs, C++ builds (e.g. `intl`, `libmemcached-awesome`, `libtiff`, `djvulibre`, `libjxl`) require the active SDK's `c++/v1` include path via `xcrun` rather than a hardcoded `/Library/Developer/CommandLineTools/...` path:
+* **Fix:** All build scripts (`build-php-mamp.sh`, `build-mamp-ext.sh`, `build-legacy-php.sh`) automatically include `-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1` in `CXXFLAGS`.
 
 ### macOS OS Version Backward Compatibility
 
