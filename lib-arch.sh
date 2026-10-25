@@ -54,7 +54,8 @@ require_native() {
 workcopy() {
   local src=$1 work
   work="$BUILD/ext-work-$(basename "$src")-$$"
-  rm -rf "$work" "$BUILD"/ext-work-"$(basename "$src")"-*
+  # Only this process's tree: another build may be using a sibling PID copy.
+  rm -rf "$work"
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --exclude '.libs' --exclude 'modules' --exclude '*.dSYM' \
       --exclude 'autom4te.cache' --exclude '*.o' --exclude '*.lo' --exclude '*.la' \
@@ -168,7 +169,9 @@ install_modules() {
   local extdir=$1 f
   # Sign before installing: if signing fails, nothing broken reaches the PHP
   # extension dir. The copies are re-signed below as macOS validates those.
-  normalize_module_links modules/*.so || return 3
+  # Sign the installed copies below; do not spend a second codesign on the
+  # build-tree copies (the dist fallback signs its own).
+  NORMALIZE_SIGN=0 normalize_module_links modules/*.so || return 3
   cp modules/*.so "$extdir/" 2>/dev/null || return 1
   for f in modules/*.so; do
     [ -f "$f" ] || continue

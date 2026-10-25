@@ -15,6 +15,7 @@ EXT56="$PHP56/lib/php/extensions/no-debug-non-zts-20131226"
 # Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
 source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+export MACOSX_DEPLOYMENT_TARGET="$DEPLOY"
 NCPU=$(sysctl -n hw.ncpu)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -63,9 +64,9 @@ _build_one() {
   fi
   if [ -f libtool ]; then
     # PHP 5.6's generated libtool may use "" or the flat_namespace default.
-    sed -i.bak -e 's/allow_undefined_flag=""/allow_undefined_flag="-Wl,-undefined,dynamic_lookup"/' \
-      -e 's|allow_undefined_flag="${wl}-flat_namespace ${wl}-undefined ${wl}suppress"|allow_undefined_flag="-Wl,-undefined,dynamic_lookup"|' \
-      libtool
+    # PHP 5.6 emits "" or the flat_namespace default depending on the SDK;
+    # replace whatever value is there.
+    sed -i.bak -E 's|^allow_undefined_flag=.*$|allow_undefined_flag="-Wl,-undefined,dynamic_lookup"|' libtool
     if ! grep -q 'allow_undefined_flag="-Wl,-undefined,dynamic_lookup"' libtool; then
       echo "ERROR: could not patch libtool for dynamic_lookup (build would mis-link)" >&2
       return 1

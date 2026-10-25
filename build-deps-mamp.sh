@@ -212,6 +212,9 @@ build_tidy() {
   # Compat symlink for legacy PHP 5.6/7.4 prebuilt tidy.so
   if [ -f "$MAMP/lib/libtidy.58.dylib" ]; then
     ln -sfn "libtidy.58.dylib" "$MAMP/lib/libtidy.5.dylib"
+  else
+    echo "ERROR: libtidy.58.dylib missing — legacy PHP needs the libtidy.5 compat link" >&2
+    exit 1
   fi
 }
 
@@ -228,6 +231,9 @@ build_libsodium() {
   # Compat symlink for legacy PHP 7.4 sodium linkage
   if [ -f "$MAMP/lib/libsodium.26.dylib" ]; then
     ln -sfn "libsodium.26.dylib" "$MAMP/lib/libsodium.23.dylib"
+  else
+    echo "ERROR: libsodium.26.dylib missing — legacy PHP needs the libsodium.23 compat link" >&2
+    exit 1
   fi
 }
 

@@ -148,14 +148,15 @@ fetch_tar() {
   local url=$1 dir=$2
   if [ -d "$SRC/$dir" ]; then log "  skip download: $dir"; return; fi
   log "  fetch: $(basename $url)"
-  curl -fsSL "$url" | tar xz -C "$SRC"
+  curl -fsSL "$url" | tar xz -C "$SRC" || { echo "ERROR: fetch failed: $url" >&2; return 1; }
 }
 
 fetch_pecl() {
   local pkg=$1 ver=$2
   [ -d "$SRC/${pkg}-${ver}" ] && { log "  skip download: $pkg-$ver"; return; }
   log "  fetch PECL: $pkg-$ver"
-  curl -fsSL "https://pecl.php.net/get/${pkg}-${ver}.tgz" | tar xz -C "$SRC"
+  curl -fsSL "https://pecl.php.net/get/${pkg}-${ver}.tgz" | tar xz -C "$SRC" \
+    || { echo "ERROR: PECL fetch failed: $pkg-$ver" >&2; return 1; }
 }
 
 # ── Extension build core ──────────────────────────────────────────────────────
@@ -164,7 +165,7 @@ fetch_pecl() {
 _build_ext_one() {
   local phpdir=$1 extdir=$2 srcdir=$3 configure_args="${4:-}"
   log "    → PHP $(basename $phpdir)"
-  cd "$srcdir"
+  cd "$srcdir" || return 1
   "$phpdir/bin/phpize" --clean 2>/dev/null || true
   "$phpdir/bin/phpize" || return 1
   # pcre2.h lives in MAMP Library — not searched by default phpize builds.
@@ -1150,7 +1151,11 @@ build_xdebug_86() {
 build_redis_86() {
   log "── redis $REDIS_VER (PHP 8.6 only) ──"
   fetch_pecl "redis" "$REDIS_VER"
-  ensure_igbinary_86 || return 1
+  local igb_flag="--enable-redis-igbinary"
+  if ! ensure_igbinary_86; then
+    warn "  igbinary unavailable — building redis without the igbinary serializer"
+    igb_flag=""
+  fi
   local DIR
   DIR=$(workcopy "$SRC/redis-$REDIS_VER") || return 1
   # Removed PHP 8.6 macros are supplied by php86-compat.h (force-included).
@@ -1161,13 +1166,17 @@ build_redis_86() {
     "$DIR/redis_session.c"
   # igbinary builds on 8.6 now (see build_igbinary_86), so enable the serializer
   # to match the 8.2-8.5 builds; igbinary.h is installed before this runs.
-  build_ext_86only "$DIR" --enable-redis-igbinary
+  build_ext_86only "$DIR" $igb_flag
 }
 _build_yaml_86()           { fetch_pecl "yaml" "$YAML_VER";                   build_ext_86only "$SRC/yaml-$YAML_VER" "--with-yaml=$DEPS"; }
 _build_memcached_86() {
   log "── memcached $MEMCACHED_VER85 (PHP 8.6 only) ──"
   fetch_pecl "memcached" "$MEMCACHED_VER85"
-  ensure_igbinary_86 || return 1
+  local igb_flag="--enable-memcached-igbinary"
+  if ! ensure_igbinary_86; then
+    warn "  igbinary unavailable — building memcached without the igbinary serializer"
+    igb_flag=""
+  fi
   local DIR
   DIR=$(workcopy "$SRC/memcached-$MEMCACHED_VER85") || return 1
   # PHP 8.6's PS_OPEN_FUNC passes save_path as zend_string*; this extension
@@ -1190,7 +1199,7 @@ for old, new in repl:
     s = s.replace(old, new, 1)
 open(p, "w").write(s)
 PYPATCH
-  build_ext_86only "$DIR" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl"
+  build_ext_86only "$DIR" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMPLIB $igb_flag --enable-memcached-json --disable-memcached-sasl"
 }
 _build_imagick_86() {
   fetch_pecl "imagick" "$IMAGICK_VER"
@@ -1207,8 +1216,7 @@ _build_imagick_86() {
 
 build_all_ext_86only() {
   # igbinary first — redis/memcached depend on its headers
-  try_build igbinary       build_igbinary_86
-  igbinary_ready_86 || IGBINARY_FAILED_86=1
+  ensure_igbinary_86 || warn "igbinary FAILED — redis/memcached will build without the igbinary serializer"
   try_build apcu           build_apcu_86
   try_build oauth          build_oauth_86
   try_build uploadprogress _build_uploadprogress_86

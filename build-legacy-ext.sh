@@ -15,6 +15,7 @@ EXT74="$PHP74/lib/php/extensions/no-debug-non-zts-20190902"
 # Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
 source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+export MACOSX_DEPLOYMENT_TARGET="$DEPLOY"
 NCPU=$(sysctl -n hw.ncpu)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
