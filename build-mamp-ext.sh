@@ -29,6 +29,7 @@ SRC=$BUILD/ext-src          # source trees unpacked here
 NCPU=$(sysctl -n hw.ncpu)
 # Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
 source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
+reap_workcopies "$BUILD"
 
 # ── Versions ──────────────────────────────────────────────────────────────────
 LIBYAML_VER=0.2.5
@@ -204,11 +205,14 @@ _build_ext_one() {
   else
     local local_dist="$SCRIPT_DIR/dist/$(basename "$phpdir")"
     mkdir -p "$local_dist"
-    # normalize_module_links ran with signing off; install_name_tool invalidated
-    # any signature, so sign before this fallback copy is usable on arm64.
+    # Modules are already signed in the build tree; verify before offering
+    # them as a dist fallback.
     for f in modules/*.so; do
       [ -f "$f" ] || continue
-      codesign --force --sign - "$f" 2>/dev/null || true
+      if ! codesign --verify "$f" 2>/dev/null; then
+        err "    ✗ $f is not signed; refusing the dist fallback"
+        return 1
+      fi
     done
     if cp modules/*.so "$local_dist/"; then
       warn "    ! Could not write to $extdir. Copied to $local_dist instead."
@@ -562,7 +566,7 @@ build_apcu() {
 build_igbinary() {
   log "── igbinary $IGBINARY_VER ──"
   fetch_pecl "igbinary" "$IGBINARY_VER"
-  build_ext_both "$SRC/igbinary-$IGBINARY_VER"
+  build_ext_both "$SRC/igbinary-$IGBINARY_VER" || return 1
   # Install igbinary.h so redis/memcached can enable igbinary support
   # Use src/php7/igbinary.h — the root igbinary.h just re-includes it relatively
   local igbinary_h="$SRC/igbinary-$IGBINARY_VER/src/php7/igbinary.h"
@@ -574,53 +578,20 @@ build_igbinary() {
   log "  igbinary.h installed to PHP include dirs"
 }
 
-# oauth 2.0.10 treats zend_hash_get_current_key_ex() as returning FAILURE and
-# compares the authorization length against sizeof() instead of sizeof()-1.
-# Both bugs exist on every PHP version, so every oauth build patches its copy.
-patch_oauth_tree() {
-  local DIR=$1
-  python3 - "$DIR/provider.c" "$DIR/oauth.c" <<'PYPATCH' || return 1
-import sys
-patches = {
-    "provider.c": [
-        ("zend_hash_get_current_key_ex(ht, &key, &num_key, &hpos)!=FAILURE",
-         "zend_hash_get_current_key_ex(ht, &key, &num_key, &hpos) == HASH_KEY_IS_STRING"),
-        ("if (FAILURE != zend_hash_get_current_key_ex(HASH_OF(&retval), &key, &num_key, &hpos)",
-         "if (HASH_KEY_IS_STRING == zend_hash_get_current_key_ex(HASH_OF(&retval), &key, &num_key, &hpos)"),
-        ('ZSTR_LEN(key) == sizeof("authorization") &&',
-         'ZSTR_LEN(key) == sizeof("authorization") - 1 &&'),
-        ('sizeof("HTTP_AUTHORIZATION"))) == NULL',
-         'sizeof("HTTP_AUTHORIZATION") - 1)) == NULL'),
-        ('"oauth_problem=unknown_problem&code=%lu", lcode',
-         '"oauth_problem=unknown_problem&code=%lu", (unsigned long) lcode'),
-    ],
-    "oauth.c": [
-        ("&& soo->last_location_header)",
-         "&& soo->last_location_header[0] != '\\0')"),
-        ("\t\tzend_hash_get_current_key_ex(oauth_args, &cur_key, &num_key, &pos);",
-         "\t\tif (zend_hash_get_current_key_ex(oauth_args, &cur_key, &num_key, &pos) != HASH_KEY_IS_STRING) {\n\t\t\tcontinue;\n\t\t}"),
-    ],
-}
-for path in sys.argv[1:]:
-    name = path.rsplit("/", 1)[-1]
-    s = open(path).read()
-    for old, new in patches[name]:
-        if old not in s:
-            sys.exit("%s patch anchor missing: %s" % (name, old[:60]))
-        s = s.replace(old, new)
-    open(path, "w").write(s)
-PYPATCH
+# Fetch, isolate, and patch oauth for one PHP line, then run the given builder.
+_build_oauth_for() {
+  local ver=$1 builder=$2 DIR
+  fetch_pecl "oauth" "$ver"
+  DIR=$(workcopy "$SRC/oauth-$ver") || return 1
+  # PHP 8.6 removed XtOffsetOf; offsetof is the standard equivalent elsewhere.
+  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
+  patch_oauth_tree "$DIR" || return 1
+  "$builder" "$DIR"
 }
 
 build_oauth() {
   log "── oauth $OAUTH_VER ──"
-  fetch_pecl "oauth" "$OAUTH_VER"
-  local DIR
-  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER") || return 1
-  # PHP 8.6 removed XtOffsetOf; offsetof is the standard equivalent (harmless earlier).
-  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
-  patch_oauth_tree "$DIR" || return 1
-  build_ext_both "$DIR"
+  _build_oauth_for "$OAUTH_VER" build_ext_both
 }
 
 build_redis() {
@@ -962,12 +933,7 @@ build_ssh2_85() {
 
 _build_apcu_85()           { fetch_pecl "apcu" "$APCU_VER";                   build_ext_85only "$SRC/apcu-$APCU_VER"; }
 _build_oauth_85() {
-  fetch_pecl "oauth" "$OAUTH_VER85"
-  local DIR
-  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER85") || return 1
-  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
-  patch_oauth_tree "$DIR" || return 1
-  build_ext_85only "$DIR"
+  _build_oauth_for "$OAUTH_VER85" build_ext_85only
 }
 _build_uploadprogress_85() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_85only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
 _build_xdebug_85()         { fetch_pecl "xdebug" "$XDEBUG_VER85"; ZLIB_CFLAGS="-I$MAMPLIB/include" ZLIB_LIBS="-L$MAMPLIB/lib -lz" CPPFLAGS="-I$MAMPLIB/include" LDFLAGS="-L$MAMPLIB/lib" build_ext_85only "$SRC/xdebug-$XDEBUG_VER85"; }
@@ -1019,7 +985,7 @@ ensure_igbinary_86() {
   igbinary_ready_86 && return 0
   [ "$IGBINARY_FAILED_86" -eq 0 ] || return 1
   log "  igbinary missing — building it first"
-  if ! build_igbinary_86; then
+  if ! build_igbinary_86 || ! igbinary_ready_86; then
     IGBINARY_FAILED_86=1
     return 1
   fi
@@ -1130,13 +1096,7 @@ build_apcu_86() {
 }
 build_oauth_86() {
   log "── oauth $OAUTH_VER85 (PHP 8.6 only) ──"
-  fetch_pecl "oauth" "$OAUTH_VER85"
-  local DIR
-  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER85") || return 1
-  # PHP 8.6 removed the XtOffsetOf macro; offsetof is the standard equivalent.
-  sed -i.bak 's/XtOffsetOf/offsetof/g' "$DIR"/*.h "$DIR"/*.c
-  patch_oauth_tree "$DIR" || return 1
-  build_ext_86only "$DIR"
+  _build_oauth_for "$OAUTH_VER85" build_ext_86only
 }
 _build_uploadprogress_86() { fetch_pecl "uploadprogress" "$UPLOADPROGRESS_VER"; build_ext_86only "$SRC/uploadprogress-$UPLOADPROGRESS_VER"; }
 build_xdebug_86() {

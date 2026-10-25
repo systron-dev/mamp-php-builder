@@ -27,6 +27,10 @@ fi
 require_native() {
   local f archs
   for f in "$@"; do
+    if [ -L "$f" ] && [ ! -e "$f" ]; then
+      echo "ERROR: $f is a dangling symlink." >&2
+      exit 1
+    fi
     [ -e "$f" ] || continue
     archs=$(lipo -archs "$f" 2>/dev/null || true)
     if [ -z "$archs" ]; then
@@ -78,7 +82,7 @@ workcopy() {
 # prefix, which breaks the "no /tmp or /opt/local linkage" rule.
 # Callers define MAMPLIB as either the Library root or its lib directory.
 normalize_module_links() {
-  local so dep base rp unresolved rc=0 libdir sign=${NORMALIZE_SIGN:-1} resolved
+  local so dep base rp unresolved rc=0 libdir resolved
   case "$MAMPLIB" in
     */lib) libdir=$MAMPLIB ;;
     *)     libdir=$MAMPLIB/lib ;;
@@ -103,6 +107,14 @@ normalize_module_links() {
         /tmp/*|/private/tmp/*) ;;
         /opt/local/*|/opt/homebrew/*|/usr/local/*)
           echo "ERROR: $(basename "$so"): foreign dependency $dep (Homebrew/MacPorts)" >&2
+          unresolved=1
+          rc=1
+          continue
+          ;;
+        /usr/lib/*|/System/*) continue ;;
+        "$mamp_root"/*) continue ;;
+        /*)
+          echo "ERROR: $(basename "$so"): non-portable absolute dependency $dep" >&2
           unresolved=1
           rc=1
           continue
@@ -137,11 +149,9 @@ normalize_module_links() {
     fi
     # Sign whenever a load command was rewritten: install_name_tool always
     # invalidates the existing ad-hoc signature.
-    if [ "$sign" -eq 1 ]; then
-      if ! codesign --force --sign - "$so" 2>/dev/null; then
-        echo "ERROR: $(basename "$so"): code signing failed" >&2
-        rc=1
-      fi
+    if ! codesign --force --sign - "$so" 2>/dev/null; then
+      echo "ERROR: $(basename "$so"): code signing failed" >&2
+      rc=1
     fi
   done
   return $rc
@@ -167,17 +177,25 @@ require_native_mamp_libs() {
 # tell a broken build from a permission problem. Must be called from the extension's build directory.
 install_modules() {
   local extdir=$1 f
-  # Sign before installing: if signing fails, nothing broken reaches the PHP
-  # extension dir. The copies are re-signed below as macOS validates those.
-  # Sign the installed copies below; do not spend a second codesign on the
-  # build-tree copies (the dist fallback signs its own).
-  NORMALIZE_SIGN=0 normalize_module_links modules/*.so || return 3
-  cp modules/*.so "$extdir/" 2>/dev/null || return 1
+  # Sign in the build tree, then install each module via a temp file so a
+  # signing failure can never leave an unsigned module in the extension dir.
+  normalize_module_links modules/*.so || return 3
+  local tmp
   for f in modules/*.so; do
     [ -f "$f" ] || continue
-    if ! codesign --force --sign - "$extdir/$(basename "$f")" 2>/dev/null; then
+    tmp="$extdir/.$(basename "$f").tmp.$$"
+    if ! cp "$f" "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      return 1
+    fi
+    if ! codesign --force --sign - "$tmp" 2>/dev/null; then
       echo "ERROR: $(basename "$f"): code signing the installed copy failed" >&2
+      rm -f "$tmp"
       return 4
+    fi
+    if ! mv "$tmp" "$extdir/$(basename "$f")"; then
+      rm -f "$tmp"
+      return 1
     fi
   done
   return 0
@@ -207,9 +225,8 @@ patch_hashkit_makefile() {
 # hide_openssl_dylibs <libdir> / restore_openssl_dylibs <libdir>
 #
 # MAMP ships OpenSSL 1.0 dylibs next to the static OpenSSL 3 archives; the
-# linker must find only the .a files. Restoring keys off the backup file rather
-# than a "moved" flag, so a signal between `mv` and the flag assignment cannot
-# leave MAMP without libssl.dylib. The backup is always a symlink, hence -L.
+# linker must find only the .a files. Restore keys off the .hidden backup so a
+# signal cannot lose the symlink. Concurrent builds are not supported.
 hide_openssl_dylibs() {
   local libdir=$1 sym
   for sym in libssl.dylib libcrypto.dylib; do
@@ -225,5 +242,57 @@ restore_openssl_dylibs() {
       mv "$libdir/$sym.hidden" "$libdir/$sym" 2>/dev/null \
         || echo "WARN: could not restore $libdir/$sym — backup kept at $sym.hidden" >&2
     fi
+  done
+}
+
+# oauth 2.0.10 treats zend_hash_get_current_key_ex() as returning FAILURE and
+# compares the authorization length against sizeof() instead of sizeof()-1.
+# Both bugs exist on every PHP version, so every oauth build patches its copy.
+patch_oauth_tree() {
+  local DIR=$1
+  python3 - "$DIR/provider.c" "$DIR/oauth.c" <<'PYPATCH' || return 1
+import sys
+patches = {
+    "provider.c": [
+        ("zend_hash_get_current_key_ex(ht, &key, &num_key, &hpos)!=FAILURE",
+         "zend_hash_get_current_key_ex(ht, &key, &num_key, &hpos) == HASH_KEY_IS_STRING"),
+        ("if (FAILURE != zend_hash_get_current_key_ex(HASH_OF(&retval), &key, &num_key, &hpos)",
+         "if (HASH_KEY_IS_STRING == zend_hash_get_current_key_ex(HASH_OF(&retval), &key, &num_key, &hpos)"),
+        ('ZSTR_LEN(key) == sizeof("authorization") &&',
+         'ZSTR_LEN(key) == sizeof("authorization") - 1 &&'),
+        ('sizeof("HTTP_AUTHORIZATION"))) == NULL',
+         'sizeof("HTTP_AUTHORIZATION") - 1)) == NULL'),
+        ('"oauth_problem=unknown_problem&code=%lu", lcode',
+         '"oauth_problem=unknown_problem&code=%lu", (unsigned long) lcode'),
+    ],
+    "oauth.c": [
+        ("&& soo->last_location_header)",
+         "&& soo->last_location_header[0] != '\\0')"),
+        ("\t\tzend_hash_get_current_key_ex(oauth_args, &cur_key, &num_key, &pos);",
+         "\t\tif (zend_hash_get_current_key_ex(oauth_args, &cur_key, &num_key, &pos) != HASH_KEY_IS_STRING) {\n\t\t\tcontinue;\n\t\t}"),
+    ],
+}
+for path in sys.argv[1:]:
+    name = path.rsplit("/", 1)[-1]
+    s = open(path).read()
+    for old, new in patches[name]:
+        if old not in s:
+            sys.exit("%s patch anchor missing: %s" % (name, old[:60]))
+        s = s.replace(old, new)
+    open(path, "w").write(s)
+PYPATCH
+}
+
+# reap_workcopies <build-dir>
+#
+# Removes workcopies whose owning process is gone. Only names ending in a
+# numeric PID are considered, so unrelated directories are never touched.
+reap_workcopies() {
+  local build=$1 d pid
+  for d in "$build"/ext-work-*-*; do
+    [ -d "$d" ] || continue
+    pid=${d##*-}
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    kill -0 "$pid" 2>/dev/null || rm -rf "$d"
   done
 }

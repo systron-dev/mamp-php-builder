@@ -14,6 +14,7 @@ PHP74="/Applications/MAMP/bin/php/php7.4.33"
 EXT74="$PHP74/lib/php/extensions/no-debug-non-zts-20190902"
 # Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
 source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
+reap_workcopies "$BUILD"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 export MACOSX_DEPLOYMENT_TARGET="$DEPLOY"
 NCPU=$(sysctl -n hw.ncpu)
@@ -90,6 +91,14 @@ build_redis() {
   _build_one "$DIR" "--enable-redis-igbinary"
 }
 
+build_oauth() {
+  fetch_pecl oauth "$OAUTH_VER"
+  local DIR
+  DIR=$(workcopy "$SRC/oauth-$OAUTH_VER") || return 1
+  patch_oauth_tree "$DIR" || return 1
+  _build_one "$DIR"
+}
+
 build_module() {
   local name=$1 ver=$2 args="${3:-}"
   fetch_pecl "$name" "$ver"
@@ -120,7 +129,7 @@ for t in "${TARGETS[@]}"; do
     imagick)        build_module imagick "$IMAGICK_VER" "--with-imagick=$DEPS" ;;
     memcached)      build_module memcached "$MEMCACHED_VER" "--with-libmemcached-dir=$DEPS --with-zlib-dir=$MAMP --enable-memcached-igbinary --enable-memcached-json --disable-memcached-sasl" ;;
     mcrypt)         build_module mcrypt "$MCRYPT_VER" "--with-mcrypt=$DEPS" ;;
-    oauth)          build_module oauth "$OAUTH_VER" ;;
+    oauth)          build_oauth ;;
     redis)          build_redis ;;
     uploadprogress) build_module uploadprogress "$UPLOADPROGRESS_VER" ;;
     yaml)           build_module yaml "$YAML_VER" "--with-yaml=$DEPS" ;;

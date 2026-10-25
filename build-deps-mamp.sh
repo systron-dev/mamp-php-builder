@@ -12,6 +12,7 @@ set -e
 
 MAMP=/Applications/MAMP/Library
 BUILD="/tmp/php-build-${USER:-mamp}/deps-phase-a"
+DEPS_ERRORS=0
 SRC="$BUILD/src"
 BACKUP="$BUILD/backup"
 # Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
@@ -214,7 +215,7 @@ build_tidy() {
     ln -sfn "libtidy.58.dylib" "$MAMP/lib/libtidy.5.dylib"
   else
     echo "ERROR: libtidy.58.dylib missing — legacy PHP needs the libtidy.5 compat link" >&2
-    exit 1
+    DEPS_ERRORS=$((${DEPS_ERRORS:-0} + 1))
   fi
 }
 
@@ -233,7 +234,7 @@ build_libsodium() {
     ln -sfn "libsodium.26.dylib" "$MAMP/lib/libsodium.23.dylib"
   else
     echo "ERROR: libsodium.26.dylib missing — legacy PHP needs the libsodium.23 compat link" >&2
-    exit 1
+    DEPS_ERRORS=$((${DEPS_ERRORS:-0} + 1))
   fi
 }
 
@@ -293,5 +294,11 @@ case "$TARGET" in
   *) echo "Unknown target: $TARGET"; exit 1 ;;
 esac
 
+if [ "$DEPS_ERRORS" -ne 0 ]; then
+  echo "ERROR: $DEPS_ERRORS dependency issue(s); see messages above." >&2
+  exit 1
+fi
+
 log "DONE: $TARGET"
 log "Backups in $BACKUP"
+

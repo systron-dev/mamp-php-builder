@@ -31,6 +31,8 @@ echo "==> macOS Deployment Target: $MACOSX_DEPLOYMENT_TARGET"
 trap 'restore_openssl_dylibs "$MAMP/lib"' EXIT
 trap 'restore_openssl_dylibs "$MAMP/lib"; exit 130' INT TERM
 
+VERSION_ERRORS=0
+
 for version in "${VERSIONS[@]}"; do
   # MAMP Pro discovers versions via regex ^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$
   # so RC/beta builds install into the numeric-only dir (8.6.0RC4 -> php8.6.0).
@@ -65,9 +67,13 @@ for version in "${VERSIONS[@]}"; do
   # touched by build-mamp-ext.sh; normalize and sign them here so no module
   # ships with an @rpath or foreign linkage.
   ext_dir=$(ls -d "/Applications/MAMP/bin/php/php${install_version}"/lib/php/extensions/* 2>/dev/null | head -1)
-  if [ -n "$ext_dir" ]; then
-    MAMPLIB="$MAMP/lib" normalize_module_links "$ext_dir"/*.so \
-      || echo "WARN: some modules in $ext_dir could not be normalized/signed" >&2
+  # Only tidy is built by PHP's own configure here; extension modules are owned
+  # by build-mamp-ext.sh and must not be rewritten by this pass.
+  if [ -n "$ext_dir" ] && [ -f "$ext_dir/tidy.so" ]; then
+    if ! MAMPLIB="$MAMP/lib" normalize_module_links "$ext_dir/tidy.so"; then
+      echo "ERROR: could not normalize/sign $ext_dir/tidy.so" >&2
+      VERSION_ERRORS=$((VERSION_ERRORS + 1))
+    fi
   fi
 
   # Copy and sign Apache module libphp.so into the PHP version's directory
@@ -91,4 +97,8 @@ for version in "${VERSIONS[@]}"; do
   fi
 done
 
+if [ "$VERSION_ERRORS" -ne 0 ]; then
+  echo "PHP builds finished with $VERSION_ERRORS version(s) needing attention." >&2
+  exit 1
+fi
 echo "All PHP versions built and installed successfully!"

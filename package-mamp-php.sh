@@ -32,23 +32,55 @@ for version in "${VERSIONS[@]}"; do
     echo "==> [SKIP] Directory not found: $target_dir"
     continue
   fi
+  # Deployment-target floor: refuse to publish binaries newer than macOS 12.0.
+  max_minos=0
+  for bin in "$target_dir/bin/php" "$target_dir/bin/php-cgi" "$target_dir/modules/libphp.so" \
+             "$target_dir"/lib/php/extensions/*/*.so; do
+    [ -e "$bin" ] || continue
+    m=$(otool -l "$bin" 2>/dev/null | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+    [ -n "$m" ] || m=$(otool -l "$bin" 2>/dev/null | awk '/LC_VERSION_MIN_MACOSX/{f=1} f&&/version/{print $2; exit}')
+    [ -n "$m" ] || continue
+    max_minos=$(awk -v a="$max_minos" -v b="$m" 'BEGIN{split(a,x,".");split(b,y,".");print (y[1]>x[1]||(y[1]==x[1]&&y[2]>x[2])||(y[1]==x[1]&&y[2]==x[2]&&y[3]>x[3]))?b:a}')
+  done
+  if [ "${ALLOW_NEWER_MINOS:-0}" != "1" ] && \
+     awk -v m="$max_minos" 'BEGIN{split(m,a,".");exit !(a[1]>12 || (a[1]==12 && (a[2]>0 || a[3]>0)))}'; then
+    echo "ERROR: $target_dir needs macOS $max_minos (floor is 12.0) — rebuild with MACOSX_DEPLOYMENT_TARGET=12.0." >&2
+    PKG_ERRORS=$((PKG_ERRORS + 1))
+    rm -f "$archive_path" "${archive_path}.sha256"
+    continue
+  fi
+
   if [ ! -x "$target_dir/bin/php" ]; then
     echo "ERROR: $target_dir/bin/php is missing or not executable — partial install, skipping." >&2
     PKG_ERRORS=$((PKG_ERRORS + 1))
+    rm -f "$archive_path" "${archive_path}.sha256"
     continue
   fi
 
   # Never ship a binary built for the other architecture under an -$ARCH name.
-  require_native "$target_dir/bin/php"
-  for extra in "$target_dir/bin/php-cgi" "$target_dir/modules/libphp.so"; do
-    [ -e "$extra" ] && require_native "$extra"
-  done
-  # Extensions are dlopen()ed by that binary; a stale copy from another arch
-  # would make the archive unusable even though bin/php itself is native.
-  for ext_dir in "$target_dir"/lib/php/extensions/*/; do
-    [ -d "$ext_dir" ] || continue
-    require_native "$ext_dir"*.so
-  done
+  # Architecture checks feed PKG_ERRORS instead of exiting: one bad version
+  # must not stop the remaining archives from being produced.
+  arch_ok() {
+    local f a
+    for f in "$@"; do
+      if [ -L "$f" ] && [ ! -e "$f" ]; then
+        echo "ERROR: $f is a dangling symlink" >&2
+        return 1
+      fi
+      [ -e "$f" ] || continue
+      a=$(lipo -archs "$f" 2>/dev/null || true)
+      case " $a " in
+        *" $ARCH "*) ;;
+        *) echo "ERROR: $f is '$a', expected $ARCH" >&2; return 1 ;;
+      esac
+    done
+  }
+  if ! arch_ok "$target_dir/bin/php" "$target_dir/bin/php-cgi" \
+              "$target_dir/modules/libphp.so" "$target_dir"/lib/php/extensions/*/*.so; then
+    PKG_ERRORS=$((PKG_ERRORS + 1))
+    rm -f "$archive_path" "${archive_path}.sha256"
+    continue
+  fi
 
   echo "==> Packaging PHP ${version} (${ARCH}) from ${target_dir}..."
   (

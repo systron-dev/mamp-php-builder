@@ -14,6 +14,7 @@ PHP56="/Applications/MAMP/bin/php/php5.6.40"
 EXT56="$PHP56/lib/php/extensions/no-debug-non-zts-20131226"
 # Native-only: arm64 on Apple Silicon, x86_64 on Intel (ignores Rosetta process arch).
 source "$(cd "$(dirname "$0")" && pwd)/lib-arch.sh"
+reap_workcopies "$BUILD"
 DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 export MACOSX_DEPLOYMENT_TARGET="$DEPLOY"
 NCPU=$(sysctl -n hw.ncpu)
