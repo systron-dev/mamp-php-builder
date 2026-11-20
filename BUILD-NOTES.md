@@ -1,13 +1,13 @@
 ---
 name: mamp-php-build
-description: "PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, 8.6.0RC4 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
+description: "PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13, 8.6.0 built from source for MAMP v6.9 on Apple Silicon and Intel — status, constraints, and lessons learned"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 3aba1562-b5c3-44a5-b50e-3e6e54ef7924
 ---
 
-PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, 8.6.0RC4, and legacy PHP 7.4.33 / 5.6.40 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
+PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13, 8.6.0, and legacy PHP 7.4.33 / 5.6.40 successfully built from source and installed into `/Applications/MAMP/bin/php/` for MAMP v6.9 on both Apple Silicon (arm64) and Intel (x86_64).
 
 **Why:** MAMP PRO v6.9 no longer offers newer PHP packages for download; only v7.x gets updates. Homebrew packages were rejected — all deps must be self-contained in `/Applications/MAMP/Library`.
 
@@ -100,7 +100,7 @@ API hashes by PHP version:
 - PHP 8.3.x: `no-debug-non-zts-20230831`
 - PHP 8.4.x: `no-debug-non-zts-20240924`
 - PHP 8.5.x: `no-debug-non-zts-20250925`
-- PHP 8.6.x: `no-debug-non-zts-20260924`
+- PHP 8.6.x: `no-debug-non-zts-20261112`
 
 ### 4. conf/php.ini.temp (MISSING from fresh build — must create manually)
 MAMP PRO template file (contains `MAMP_xxx_MAMP` placeholders, not live values).
@@ -353,7 +353,7 @@ Target versions updated to latest upstream releases (released September 24, 2026
 - `php8.3.35` (`no-debug-non-zts-20230831`)
 - `php8.4.26` (`no-debug-non-zts-20240924`)
 - `php8.5.11` (`no-debug-non-zts-20250925`)
-- `php8.6.0` — PHP 8.6.0RC3, installed under the stripped numeric name (`no-debug-non-zts-20260924`)
+- `php8.6.0` — PHP 8.6.0RC3, installed under the stripped numeric name (`no-debug-non-zts-20261112`)
 
 ### Build fixes added for PHP 8.6:
 1. **FreeType compilation**: Bundled `libgd` requires `<ft2build.h>`. Added `-DHAVE_FT2BUILD_H` to `FREETYPE2_CFLAGS` and auto-appended `#define HAVE_FT2BUILD_H 1` in `main/php_config.h`.
@@ -364,20 +364,20 @@ Target versions updated to latest upstream releases (released September 24, 2026
 
 ---
 
-## PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, and 8.6.0RC4 Update (2026-10-22)
+## PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13, and 8.6.0 Update (2026-10-22)
 
 Target versions updated to the 2026-10-21 security releases:
-- `php8.2.35` (`no-debug-non-zts-20220829`) — 8.2 reaches EOL on 2026-12-31
-- `php8.3.36` (`no-debug-non-zts-20230831`)
-- `php8.4.27` (`no-debug-non-zts-20240924`)
-- `php8.5.12` (`no-debug-non-zts-20250925`)
-- `php8.6.0` — PHP 8.6.0RC4, installed under the stripped numeric name (`no-debug-non-zts-20260924`)
+- `php8.2.36` (`no-debug-non-zts-20220829`) — 8.2 reaches EOL on 2026-12-31
+- `php8.3.37` (`no-debug-non-zts-20230831`)
+- `php8.4.28` (`no-debug-non-zts-20240924`)
+- `php8.5.13` (`no-debug-non-zts-20250925`)
+- `php8.6.0` — PHP 8.6.0, installed under the stripped numeric name (`no-debug-non-zts-20261112`)
 
 Security context: the four stable releases fix [CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618) (OOM corruption in mod_php/FPM)
 and [CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619) (stale global state), both CVSS v4.0 9.2. Verified against the php-src
-tags: `NEWS` in php-8.2.35, php-8.3.36, php-8.4.27, php-8.5.12 and php-8.6.0RC4 each lists
+tags: `NEWS` in php-8.2.36, php-8.3.37, php-8.4.28, php-8.5.13 and php-8.6.0 each lists
 both CVEs; php-8.6.0RC3 does not. Updating is the only complete
-mitigation. PHP 8.6.0RC4 is a QA build from `downloads.php.net/~mbeccati/` — no main
+mitigation. PHP 8.6.0 is a QA build from `downloads.php.net/~mbeccati/` — no main
 `distributions/` tarball exists for RC releases.
 
 Script changes:
@@ -431,7 +431,7 @@ Operational notes:
 
 Final state after rebuild:
 
-- PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, 8.6.0RC4 all start and report the versions above.
+- PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13, 8.6.0 all start and report the versions above.
 - 17 shared extensions load on 8.2–8.5 (`apcu`, `igbinary`, `imagick`, `memcached`, `mcrypt`,
   `OAuth`, `redis`, `ssh2`, `tidy`, `uploadprogress`, `yaml`, `pgsql`, `pdo_pgsql`,
   `sysvsem`, `sysvshm`, `sysvmsg`, `shmop`). `xdebug` is installed but disabled by default.
@@ -462,6 +462,10 @@ backport for CVE-2026-109618 and CVE-2026-109619.
   yaml, xdebug (7.4 additionally mcrypt/ssh2/sysv).
 - PHP-API-compatible prebuilt modules restored for imap, mcrypt (5.6), pgsql, pdo_pgsql,
   tidy, yaz and OPcache. All load with zero warnings and no `/opt/local` references.
+- `gettext` is built **shared** (`--with-gettext=shared,$MAMP`) so `gettext.so` is
+  installed. The earlier `--with-gettext=$MAMP` compiled it into `bin/php`, leaving a
+  fresh install without `gettext.so` while the inherited MAMP `php.ini` still declared
+  `extension=gettext.so`.
   `imap` uses c-client 2007f (unmaintained, insecure).
 - Stale/unusable modules (`apc`, `memcache`) moved to
   `$BUILD/legacy-backup/stale-56/` and `stale-74/`.
@@ -477,7 +481,7 @@ All PHP builds and extensions were verified and built natively on Intel Mac mini
 - **C++ Standard Library include fix**: Added `-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1` to `CXXFLAGS` across `build-mamp-ext.sh` and `build-legacy-php.sh`. This ensures Apple Clang on modern macOS SDKs can resolve `<string>`, `<iostream>`, `<new>`, and `<cassert>` across both arm64 and x86_64.
 - **PHP 5.6 extension linking on modern Darwin**: Injected `allow_undefined_flag="-Wl,-undefined,dynamic_lookup"` into `libtool` in `build-legacy-ext56.sh` to resolve undefined symbol errors during shared module linking on modern Darwin (macOS ≥ 11).
 - **Core PHP builds & extensions**:
-  - `php8.2.35`, `php8.3.36`, `php8.4.27`, `php8.5.12`, `php8.6.0` (from 8.6.0RC4) built and verified.
+  - `php8.2.36`, `php8.3.37`, `php8.4.28`, `php8.5.13`, `php8.6.0` (from 8.6.0) built and verified.
   - Legacy `php7.4.33` and `php5.6.40` built and verified with compatible extensions.
 - **Packaging**: `./package-mamp-php.sh` generated tarballs and sha256 checksums in `dist/` for all versions with architecture suffix `-x86_64.tar.gz`. Zero runtime dependencies outside `/Applications/MAMP/Library`.
 

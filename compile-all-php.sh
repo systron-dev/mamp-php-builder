@@ -9,7 +9,7 @@ BUILD="/tmp/php-build-${USER:-mamp}"
 START_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib-arch.sh
 source "$START_DIR/lib-arch.sh"
-VERSIONS=("8.2.35" "8.3.36" "8.4.27" "8.5.12" "8.6.0RC4")
+VERSIONS=("8.2.36" "8.3.37" "8.4.28" "8.5.13" "8.6.0")
 # Optional: pass versions as arguments to build a subset, e.g. `./compile-all-php.sh 8.6.0RC4`
 if [ $# -gt 0 ]; then
   VERSIONS=("$@")

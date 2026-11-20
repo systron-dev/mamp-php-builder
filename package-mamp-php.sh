@@ -13,7 +13,7 @@ DIST_DIR="${START_DIR}/dist"
 source "$START_DIR/lib-arch.sh"
 PHP_BASE="/Applications/MAMP/bin/php"
 
-VERSIONS=("8.2.35" "8.3.36" "8.4.27" "8.5.12" "8.6.0RC4")
+VERSIONS=("8.2.36" "8.3.37" "8.4.28" "8.5.13" "8.6.0")
 if [ $# -gt 0 ]; then
   VERSIONS=("$@")
 fi

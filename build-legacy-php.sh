@@ -118,7 +118,7 @@ install_php() {
     --with-curl="$MAMP" \
     --with-libxml-dir="$LEGACY" \
     "$tidy_flag" \
-    --with-gettext="$MAMP" \
+    --with-gettext=shared,"$MAMP" \
     --with-iconv="$MAMP" \
     --with-ldap="$MAMP" \
     ${extra[@]+"${extra[@]}"} \
@@ -167,11 +167,27 @@ install_php() {
   # 7.4 forces the xsl extension on when libxslt is present; MAMP's libxml2
   # hides xmlXPathValuePop/Push, so drop xsl objects and libs entirely.
   sed -i.bak -E "s#ext/xsl/[A-Za-z0-9_./-]+\.lo##g; s#-lxslt##g; s#-lexslt##g" Makefile
+  # PHP 5.6's generated libtool cannot link shared extensions against the
+  # (not yet built) PHP binary; modules need undefined symbols resolved at load.
+  if [ "$version" = "5.6.40" ] && [ -f libtool ]; then
+    sed -i.bak -E 's|^allow_undefined_flag=.*$|allow_undefined_flag="-Wl,-undefined,dynamic_lookup"|' libtool
+    grep -q 'allow_undefined_flag="-Wl,-undefined,dynamic_lookup"' libtool \
+      || { echo "ERROR: could not patch libtool for dynamic_lookup" >&2; return 1; }
+  fi
   make clean >/dev/null 2>&1 || true
   make -j"$NCPU"
+  # `make install` reruns PEAR and rewrites pear.conf with machine-specific
+  # temp paths; keep the packaged one.
+  local pear_conf_bak="$BUILD/pear.conf.bak-$version"
+  [ -f "$prefix/conf/pear.conf" ] && cp "$prefix/conf/pear.conf" "$pear_conf_bak"
   make install
+  [ -f "$pear_conf_bak" ] && cp "$pear_conf_bak" "$prefix/conf/pear.conf"
   restore_ssl
   restore_onig
+
+  # Match MAMP's packaged layout: drop build-only artifacts.
+  rm -f "$prefix"/lib/php/extensions/*/*.a
+  rm -rf "$prefix"/php
 
   local src_libphp
   src_libphp=$(find . -maxdepth 2 -name libphp.so | head -1)

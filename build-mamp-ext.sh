@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build missing PHP extensions for MAMP PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12
+# Build missing PHP extensions for MAMP PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13
 # All deps built from source — no Homebrew dependencies
 # Usage: ./build-mamp-ext.sh [target]
 # Targets: all | deps | ext | <specific> (see case block at bottom)
@@ -11,16 +11,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # ── Paths ─────────────────────────────────────────────────────────────────────
 MAMP=/Applications/MAMP
 MAMPLIB=$MAMP/Library
-PHP82=$MAMP/bin/php/php8.2.35
-PHP83=$MAMP/bin/php/php8.3.36
-PHP84=$MAMP/bin/php/php8.4.27
-PHP85=$MAMP/bin/php/php8.5.12
+PHP82=$MAMP/bin/php/php8.2.36
+PHP83=$MAMP/bin/php/php8.3.37
+PHP84=$MAMP/bin/php/php8.4.28
+PHP85=$MAMP/bin/php/php8.5.13
 PHP86=$MAMP/bin/php/php8.6.0
 EXT82=$PHP82/lib/php/extensions/no-debug-non-zts-20220829
 EXT83=$PHP83/lib/php/extensions/no-debug-non-zts-20230831
 EXT84=$PHP84/lib/php/extensions/no-debug-non-zts-20240924
 EXT85=$PHP85/lib/php/extensions/no-debug-non-zts-20250925
-EXT86=$PHP86/lib/php/extensions/no-debug-non-zts-20260924
+EXT86=$PHP86/lib/php/extensions/no-debug-non-zts-20261112
 BUILD="/tmp/php-build-${USER:-mamp}"
 DEPS=$BUILD/ext-deps        # static libs installed here
 # Prefer our own *-config tools over MacPorts copies of the same name.
@@ -682,7 +682,7 @@ build_yaz_ext() {
 
 build_sysv_ext() {
   log "── sysvsem + sysvshm + sysvmsg + shmop (from PHP source) ──"
-  for PHP_VER in 8.2.35 8.3.36 8.4.27 8.5.12; do
+  for PHP_VER in 8.2.36 8.3.37 8.4.28 8.5.13; do
     local php_src="$SRC/php-$PHP_VER"
     local php_src_alt="$BUILD/php-$PHP_VER"
     if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
@@ -698,16 +698,16 @@ build_sysv_ext() {
 
   for ext in sysvsem sysvshm sysvmsg shmop; do
     log "  ── $ext ──"
-    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.35/ext/$ext" ""
-    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.36/ext/$ext" ""
-    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.27/ext/$ext" ""
-    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.12/ext/$ext"  ""
+    _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.36/ext/$ext" ""
+    _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.37/ext/$ext" ""
+    _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.28/ext/$ext" ""
+    _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.13/ext/$ext"  ""
   done
 }
 
 build_sysv_ext_86() {
   log "── sysvsem + sysvshm + sysvmsg + shmop (PHP 8.6 only) ──"
-  local PHP_VER="8.6.0RC4"
+  local PHP_VER="8.6.0"
   local php_src="$SRC/php-$PHP_VER"
   local php_src_alt="$BUILD/php-$PHP_VER"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
@@ -729,7 +729,7 @@ build_sysv_ext_86() {
 build_pgsql_ext() {
   log "── pgsql + pdo_pgsql (from PHP source) ──"
   # These are bundled extensions — need PHP source tree
-  for PHP_VER in 8.2.35 8.3.36 8.4.27 8.5.12; do
+  for PHP_VER in 8.2.36 8.3.37 8.4.28 8.5.13; do
     local php_src="$SRC/php-$PHP_VER"
     # PHP build trees in /tmp/php-build are also valid sources
     local php_src_alt="$BUILD/php-$PHP_VER"
@@ -750,14 +750,14 @@ build_pgsql_ext() {
   export LIBS="-lpq -lpgcommon -lpgport -lssl -lcrypto -lz"
 
   local rc=0
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.35/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.36/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.27/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.12/ext/pgsql"      "--with-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.35/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.36/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.27/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
-  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.12/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.36/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.37/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.28/ext/pgsql"     "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.13/ext/pgsql"      "--with-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP82" "$EXT82" "$SRC/php-8.2.36/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP83" "$EXT83" "$SRC/php-8.3.37/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP84" "$EXT84" "$SRC/php-8.4.28/ext/pdo_pgsql" "--with-pdo-pgsql=$DEPS" || rc=$?
+  _build_ext_one "$PHP85" "$EXT85" "$SRC/php-8.5.13/ext/pdo_pgsql"  "--with-pdo-pgsql=$DEPS" || rc=$?
 
   unset LDFLAGS LIBS
   restore_mamp_ssl
@@ -899,13 +899,13 @@ build_mcrypt_ext_85() {
 
 build_pgsql_ext_85() {
   log "── pgsql + pdo_pgsql (PHP 8.5 only) ──"
-  local php_src="$SRC/php-8.5.12"
-  local php_src_alt="$BUILD/php-8.5.12"
+  local php_src="$SRC/php-8.5.13"
+  local php_src_alt="$BUILD/php-8.5.13"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
     ln -sf "$php_src_alt" "$php_src"
   elif [ ! -d "$php_src" ]; then
-    log "  fetch PHP 8.5.12 source..."
-    curl -fsSL "https://www.php.net/distributions/php-8.5.12.tar.gz" | tar xz -C "$SRC"
+    log "  fetch PHP 8.5.13 source..."
+    curl -fsSL "https://www.php.net/distributions/php-8.5.13.tar.gz" | tar xz -C "$SRC"
   fi
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"
@@ -1047,13 +1047,13 @@ build_mcrypt_ext_86() {
 
 build_pgsql_ext_86() {
   log "── pgsql + pdo_pgsql (PHP 8.6 only) ──"
-  local php_src="$SRC/php-8.6.0RC4"
-  local php_src_alt="$BUILD/php-8.6.0RC4"
+  local php_src="$SRC/php-8.6.0"
+  local php_src_alt="$BUILD/php-8.6.0"
   if [ -d "$php_src_alt" ] && [ ! -d "$php_src" ]; then
     ln -sf "$php_src_alt" "$php_src"
   elif [ ! -d "$php_src" ]; then
-    log "  fetch PHP 8.6.0RC4 source..."
-    curl -fsSL "https://downloads.php.net/~mbeccati/php-8.6.0RC4.tar.gz" | tar xz -C "$SRC"
+    log "  fetch PHP 8.6.0 source..."
+    curl -fsSL "https://www.php.net/distributions/php-8.6.0.tar.gz" | tar xz -C "$SRC"
   fi
   hide_mamp_ssl
   export LDFLAGS="-L$DEPS/lib -L$MAMPLIB/lib"

@@ -19,11 +19,11 @@ versions = {
     "8.4.26": "no-debug-non-zts-20240924",
     "8.5.11": "no-debug-non-zts-20250925",
     "8.6.0RC3": "no-debug-non-zts-20260924",
-    "8.2.35": "no-debug-non-zts-20220829",
-    "8.3.36": "no-debug-non-zts-20230831",
-    "8.4.27": "no-debug-non-zts-20240924",
-    "8.5.12": "no-debug-non-zts-20250925",
-    "8.6.0RC4": "no-debug-non-zts-20260924",
+    "8.2.36": "no-debug-non-zts-20220829",
+    "8.3.37": "no-debug-non-zts-20230831",
+    "8.4.28": "no-debug-non-zts-20240924",
+    "8.5.13": "no-debug-non-zts-20250925",
+    "8.6.0": "no-debug-non-zts-20261112",
 }
 
 # MAMP Pro only lists version dirs whose name is numeric-only (phpX.Y.Z), so RC
@@ -81,6 +81,8 @@ def build_ini_ext_block(version, ext_hash):
         lines.append(f"{prefix}extension={name}.so")
     if ext_available(version, ext_hash, "xdebug"):
         lines.append(f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/xdebug.so"')
+        lines.append("; xdebug.mode=debug")
+        lines.append("; xdebug.start_with_request=trigger  ; use 'yes' to always debug, or 'trigger' for on-demand (XDEBUG_TRIGGER)")
     return "\n".join(lines)
 
 def build_temp_ext_block(version, ext_hash):
@@ -91,6 +93,8 @@ def build_temp_ext_block(version, ext_hash):
         lines.append(f"{prefix}{marker}extension={name}.so")
     if ext_available(version, ext_hash, "xdebug"):
         lines.append(f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/xdebug.so"')
+        lines.append("; xdebug.mode=debug")
+        lines.append("; xdebug.start_with_request=trigger  ; use 'yes' to always debug, or 'trigger' for on-demand (XDEBUG_TRIGGER)")
     return "\n".join(lines)
 
 for version, ext_hash in versions.items():

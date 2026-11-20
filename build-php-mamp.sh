@@ -4,11 +4,11 @@
 # PREREQUISITE: OpenSSL 3.x must be built from source and installed into
 #   /Applications/MAMP/Library before running this script.
 #   (MAMP ships OpenSSL 1.0.2u which is too old for PHP 8.3+)
-# Usage: bash build-php-mamp.sh 8.2.35
-#         bash build-php-mamp.sh 8.3.36
-#         bash build-php-mamp.sh 8.4.27
-#         bash build-php-mamp.sh 8.5.12
-#         bash build-php-mamp.sh 8.6.0RC4
+# Usage: bash build-php-mamp.sh 8.2.36
+#         bash build-php-mamp.sh 8.3.37
+#         bash build-php-mamp.sh 8.4.28
+#         bash build-php-mamp.sh 8.5.13
+#         bash build-php-mamp.sh 8.6.0
 # PHP 8.5 notes: --enable-opcache removed (opcache always static); comment out
 #   zend_extension=opcache.so in php.ini. Run build-mamp-ext.sh ext85 for extensions.
 
@@ -80,7 +80,10 @@ export PNG_CFLAGS="-I$MAMP/include"
 export PNG_LIBS="-L$MAMP/lib -lpng16"
 export XSL_CFLAGS="-I$MAMP/include"
 export XSL_LIBS="-L$MAMP/lib -lxslt -lxml2"
+export EXSLT_CFLAGS="-I$MAMP/include"
 export EXSLT_LIBS="-L$MAMP/lib -lexslt"
+export AVIF_CFLAGS="-I$BUILD/ext-deps/include"
+export AVIF_LIBS="-L$BUILD/ext-deps/lib -lavif -laom -lc++"
 export LIBSODIUM_CFLAGS="-I$MAMP/include"
 export LIBSODIUM_LIBS="-L$MAMP/lib -lsodium"
 export ARGON2_CFLAGS="-I$MAMP/include"
@@ -207,6 +210,7 @@ fi
   --disable-phpdbg \
   --enable-cgi \
   --with-webp \
+  --with-avif \
   --with-jpeg \
   --with-freetype \
   --enable-pcntl \

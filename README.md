@@ -1,6 +1,6 @@
 # MAMP 6.9 — Custom PHP Build Scripts
 
-Build scripts and documentation for compiling PHP 8.2.x / 8.3.x / 8.4.x / 8.5.x / 8.6.x from source and installing into MAMP 6.9 on macOS (Apple Silicon and Intel).
+Build scripts and documentation for compiling PHP 8.2.x / 8.3.x / 8.4.x / 8.5.x / 8.6.x (plus EOL legacy 5.6.40 / 7.4.33) from source and installing into MAMP 6.9 on macOS (Apple Silicon and Intel).
 
 MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 
@@ -29,11 +29,11 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 MAMP Pro enumerates PHP versions by matching the install path against
 `^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$` — the patch component must
 be digits only, with no suffix. Pre-releases therefore install under their **numeric**
-name: `8.6.0RC4` → `php8.6.0`. A directory named `php8.6.0RC4` works from the command line
+name: `8.6.0` → `php8.6.0`. A directory named `php8.6.0` works from the command line
 but never appears in the MAMP Pro version list.
 
 Newer archives already unpack into `php8.6.0/`. Older ones carry a suffixed
-top-level directory (e.g. `php8.6.0RC4/`). Renaming that directory alone is **not**
+top-level directory (e.g. `php8.6.0/`). Renaming that directory alone is **not**
 sufficient — the prefix is baked into `bin/php` and `bin/php-cgi`, so the CLI would
 load no `php.ini` and `extension_dir` would point at a missing path. See the fix-up
 recipe in [BUILD.md](BUILD.md#install-directory-naming); rebuilding with the current
@@ -113,7 +113,7 @@ Host environments used for builds in this repo:
 | Deployment target | 12.0 | 12.0 |
 | MAMP | 6.9 at `/Applications/MAMP` | 6.9 at `/Applications/MAMP` |
 
-Override the target when building for an older floor, e.g. `MACOSX_DEPLOYMENT_TARGET=13.0 bash build-php-mamp.sh 8.5.12` — all build scripts read it, defaulting to `12.0`.
+Override the target when building for an older floor, e.g. `MACOSX_DEPLOYMENT_TARGET=13.0 bash build-php-mamp.sh 8.5.13` — all build scripts read it, defaulting to `12.0`.
 
 The latest `x86_64` artifacts were built on a Mac mini 6-core Intel running macOS Sequoia 15 (15.8.1). They carry the same `minos 12.0` deployment target.
 
@@ -121,11 +121,21 @@ The latest `x86_64` artifacts were built on a Mac mini 6-core Intel running macO
 
 | PHP | Extensions | Runs on |
 |-----|-----------|---------|
-| 8.2.35 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop | macOS 12.0+ (arm64 & x86_64) |
-| 8.3.36 | same as above | macOS 12.0+ (arm64 & x86_64) |
-| 8.4.27 | same as above | macOS 12.0+ (arm64 & x86_64) |
-| 8.5.12 | same as above (opcache static/built-in; xdebug 3.5.3, oauth 2.0.10, memcached 3.4.0) | macOS 12.0+ (arm64 & x86_64) |
-| 8.6.0RC4 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache (static), pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop (via `ext86`; imap excluded for security) | macOS 12.0+ (arm64 & x86_64) |
+| 5.6.40 (EOL) | gd, sqlite3, pdo_sqlite, apcu, igbinary, imagick, memcached, oauth, redis, ssh2, uploadprogress, xdebug, yaml, opcache (via `build-legacy-php.sh` + `build-legacy-ext56.sh`; xsl omitted) | macOS 12.0+ (arm64 & x86_64) |
+| 7.4.33 (EOL) | gd, sqlite3, pdo_sqlite, apcu, igbinary, imagick, memcached, oauth, redis, ssh2, uploadprogress, xdebug, yaml, opcache (via `build-legacy-php.sh` + `build-legacy-ext.sh`; xsl omitted) | macOS 12.0+ (arm64 & x86_64) |
+| 8.2.36 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache, pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop, ffi, dba, gmp, amqp, protobuf, mongodb, xsl/exslt, gd/avif | macOS 12.0+ (arm64 & x86_64) |
+| 8.3.37 | same as above | macOS 12.0+ (arm64 & x86_64) |
+| 8.4.28 | same as above | macOS 12.0+ (arm64 & x86_64) |
+| 8.5.13 | same as above (opcache static/built-in; xdebug 3.5.3, oauth 2.0.10, memcached 3.4.0) | macOS 12.0+ (arm64 & x86_64) |
+| 8.6.0 | apcu, igbinary, imagick, mcrypt, memcached, oauth, redis, ssh2, tidy, uploadprogress, xdebug, yaml, opcache (static), pgsql, pdo_pgsql, sysvsem, sysvshm, sysvmsg, shmop, ffi, dba, gmp, amqp, protobuf, mongodb, xsl/exslt, gd/avif (via `ext86` + `build-extra-ext.sh`; imap excluded for security) | macOS 12.0+ (arm64 & x86_64) |
+
+**GD image formats:**
+- **`8.2.36`–`8.6.0`:** GIF (read/create), JPEG, PNG, WebP, AVIF, BMP, WBMP, XBM, TGA (read), plus FreeType (`imagick.so` is also included).
+- **`7.4.33`:** GIF (read/create), JPEG, PNG, WebP, BMP, WBMP, XBM, TGA (read), plus FreeType.
+- **`5.6.40`:** GIF (read/create), JPEG, PNG, WebP, WBMP, XBM, plus FreeType.
+
+> [!WARNING]
+> **Legacy PHP (`5.6.40` / `7.4.33`) Security Notice:** Both versions are End-of-Life (EOL) and link OpenSSL 1.1.1w. Although built from community security-backport branches (`shivammathur/php-src-backports`, latest backports pulled **2026-11-19**), they are **not** upstream-supported and must only be used for local legacy testing — never expose them to untrusted networks or production.
 
 > [!NOTE]
 > **MAMP PRO GUI Compatibility:** PHP versions `>= 8.5.0` are filtered out by the legacy MAMP PRO v6.x GUI dropdown due to internal app version checks. However, PHP 8.5.x and 8.6.x remain fully functional for CLI usage, custom virtual hosts, and custom Apache/CGI setups.
@@ -157,12 +167,24 @@ Both backport branches include the CVE-2023-0662 multipart DoS fix; `php.ini` pi
 
 ## Security
 
-All five packaged builds — PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12, and 8.6.0RC4 — contain the
-patches for **[CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618)** (OOM corruption in mod_php/FPM) and **[CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619)**
-(stale global state), both CVSS v4.0 9.2 and fixed upstream on 2026-10-21. Confirmed in the
-`NEWS` file of each php-src tag (`php-8.2.35`, `php-8.3.36`, `php-8.4.27`, `php-8.5.12`,
-`php-8.6.0RC4`). Run one of these builds; older 8.2–8.6 targets in `dist/` do not include
-the fixes.
+All five packaged builds — PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13, and 8.6.0 — include the
+2026-11-19 security release fixes:
+- **[CVE-2026-129289](https://www.cve.org/CVERecord?id=CVE-2026-129289)** (CVSS 9.2): PHP-FPM FastCGI request smuggling via unread `php://input`
+- **[CVE-2026-126714](https://www.cve.org/CVERecord?id=CVE-2026-126714)** ("phpAfterShell"): File-based session handler race/TOCTOU deserialization RCE
+- **[CVE-2026-129474](https://www.cve.org/CVERecord?id=CVE-2026-129474)** / **[CVE-2026-129496](https://www.cve.org/CVERecord?id=CVE-2026-129496)**: Use-after-free in magic method backtraces and timezone caches
+- **[CVE-2026-129538](https://www.cve.org/CVERecord?id=CVE-2026-129538)**: PHP-CGI `PATH_INFO` out-of-bounds read/write
+- **[CVE-2026-129291](https://www.cve.org/CVERecord?id=CVE-2026-129291)** / **[CVE-2026-129292](https://www.cve.org/CVERecord?id=CVE-2026-129292)**: PHP-FPM epoll UAF and status endpoint XSS
+- **[CVE-2026-128090](https://www.cve.org/CVERecord?id=CVE-2026-128090)**: PHAR OpenSSL signature bypass
+- **[CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618)** / **[CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619)** (CVSS v4.0 9.2, 2026-10-21): OOM corruption in mod_php/FPM and stale global state
+
+Legacy **5.6.40** and **7.4.33** (`shivammathur/php-src-backports`, pulled 2026-11-19) include:
+- **[GHSA-fm2m-fjf5-v3cp](https://github.com/advisories/GHSA-fm2m-fjf5-v3cp)**: RCE via corrupted session file (`phpAfterShell`)
+- **[GHSA-658j-r8rw-q6mx](https://github.com/advisories/GHSA-658j-r8rw-q6mx)**: `session.upload_progress.enabled` off by default
+- **[GHSA-f6gg-rchx-xw8j](https://github.com/advisories/GHSA-f6gg-rchx-xw8j)**: Mixed case HTTPS and FTPS
+- **[GHSA-mmf9-xm3v-hg2x](https://github.com/advisories/GHSA-mmf9-xm3v-hg2x)**: Quadratic folded header concatenation (7.4)
+- **[GHSA-jm4m-qfqx-967m](https://github.com/advisories/GHSA-jm4m-qfqx-967m)**: FPM worker stdio pipe fd closed twice
+- **[CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618)** / **[CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619)** (`php2shell`, 2026-10-21): OOM corruption in mod_php/FPM and stale global state
+- **SOAP**: Restrict SOAP element lookups to XML element nodes
 
 `imap` is not shipped: PHP removed it from core in 8.4, and PECL `imap` depends on UW
 `c-client` 2007f — unmaintained since 2007 with known parser CVEs.
