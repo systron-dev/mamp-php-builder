@@ -208,10 +208,11 @@ legacy prefix for PHP 5.6/7.4.
 | libsodium | 1.0.22 | `libsodium.26`, compat `libsodium.23` symlink for legacy PHP 7.4 |
 | libwebp | 1.6.0 | |
 | oniguruma | 6.9.10 | |
+| AVIF (`ext/gd`) | libaom + libavif | static, bundled into PHP 8.2–8.6 |
 | ImageMagick delegates | jbig 2.2, libjxl 0.12, djvulibre 3.5.30, brotli 1.2.1, highway 1.4.0 | static, bundled into imagick.so |
 | ICU | 56.1 | phase B |
 | libxml2 | 2.9.4 | phase B |
-| libxslt | 1.1.28 | phase B (1.1.45 needs libxml2 ≥ 2.15.1) |
+| libxslt / libexslt | 1.1.28 | phase B (1.1.45 needs libxml2 ≥ 2.15.1); EXSLT enabled in 8.2–8.6 |
 
 ## License
 
