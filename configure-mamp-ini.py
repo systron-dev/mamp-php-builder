@@ -58,6 +58,11 @@ SHARED_EXTS = [
     "imap", "pgsql", "pdo_pgsql", "mcrypt", "ssh2", "yaml", "uploadprogress",
     "sysvsem", "sysvshm", "sysvmsg", "shmop",
 ]
+# Optional extensions built by build-extra-ext.sh: emitted commented out so
+# users can enable them manually without loading them by default.
+OPTIONAL_EXTS = [
+    "ffi", "dba", "gmp", "amqp", "protobuf", "mongodb",
+]
 # php.ini.temp uses MAMP_*_MAMP markers so MAMP PRO can toggle these in its GUI.
 MAMP_MARKERS = {
     "apcu": "MAMP_apc_MAMP",
@@ -79,6 +84,9 @@ def build_ini_ext_block(version, ext_hash):
     for name in SHARED_EXTS:
         prefix = "" if ext_available(version, ext_hash, name) else ";"
         lines.append(f"{prefix}extension={name}.so")
+    for name in OPTIONAL_EXTS:
+        if ext_available(version, ext_hash, name):
+            lines.append(f";extension={name}.so")
     if ext_available(version, ext_hash, "xdebug"):
         lines.append(f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/xdebug.so"')
         lines.append("; xdebug.mode=debug")
@@ -91,6 +99,9 @@ def build_temp_ext_block(version, ext_hash):
         prefix = "" if ext_available(version, ext_hash, name) else ";"
         marker = MAMP_MARKERS.get(name, "")
         lines.append(f"{prefix}{marker}extension={name}.so")
+    for name in OPTIONAL_EXTS:
+        if ext_available(version, ext_hash, name):
+            lines.append(f";extension={name}.so")
     if ext_available(version, ext_hash, "xdebug"):
         lines.append(f';zend_extension="/Applications/MAMP/bin/php/php{version}/lib/php/extensions/{ext_hash}/xdebug.so"')
         lines.append("; xdebug.mode=debug")
