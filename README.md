@@ -138,7 +138,7 @@ The latest `x86_64` artifacts were built on a Mac mini 6-core Intel running macO
 > **Legacy PHP (`5.6.40` / `7.4.33`) Security Notice:** Both versions are End-of-Life (EOL) and link OpenSSL 1.1.1w. Although built from community security-backport branches (`shivammathur/php-src-backports`, latest backports pulled **2026-11-19**), they are **not** upstream-supported and must only be used for local legacy testing — never expose them to untrusted networks or production.
 
 > [!NOTE]
-> **MAMP PRO GUI Compatibility:** PHP versions `>= 8.5.0` are filtered out by the legacy MAMP PRO v6.x GUI dropdown due to internal app version checks. However, PHP 8.5.x and 8.6.x remain fully functional for CLI usage, custom virtual hosts, and custom Apache/CGI setups.
+> **MAMP PRO GUI Compatibility:** MAMP PRO v6.x GUI lists all numeric-only version directories (including `8.5.x` and `8.6.0`); only pre-release/RC suffixes (e.g. `php8.6.0RC1`) are filtered out.
 
 `configure-mamp-ini.py` enables every shared extension it finds in the version's extension
 directory. **xdebug is the exception** — its `zend_extension` line is written commented out to
@@ -178,11 +178,11 @@ All five packaged builds — PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13, and 8.6.0 — i
 - **[CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618)** / **[CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619)** (CVSS v4.0 9.2, 2026-10-21): OOM corruption in mod_php/FPM and stale global state
 
 Legacy **5.6.40** and **7.4.33** (`shivammathur/php-src-backports`, pulled 2026-11-19) include:
-- **[GHSA-fm2m-fjf5-v3cp](https://github.com/advisories/GHSA-fm2m-fjf5-v3cp)**: RCE via corrupted session file (`phpAfterShell`)
-- **[GHSA-658j-r8rw-q6mx](https://github.com/advisories/GHSA-658j-r8rw-q6mx)**: `session.upload_progress.enabled` off by default
-- **[GHSA-f6gg-rchx-xw8j](https://github.com/advisories/GHSA-f6gg-rchx-xw8j)**: Mixed case HTTPS and FTPS
-- **[GHSA-mmf9-xm3v-hg2x](https://github.com/advisories/GHSA-mmf9-xm3v-hg2x)**: Quadratic folded header concatenation (7.4)
-- **[GHSA-jm4m-qfqx-967m](https://github.com/advisories/GHSA-jm4m-qfqx-967m)**: FPM worker stdio pipe fd closed twice
+- **[GHSA-fm2m-fjf5-v3cp](https://github.com/php/php-src/security/advisories/GHSA-fm2m-fjf5-v3cp)**: RCE via corrupted session file (`phpAfterShell`)
+- **[GHSA-658j-r8rw-q6mx](https://github.com/php/php-src/security/advisories/GHSA-658j-r8rw-q6mx)**: `session.upload_progress.enabled` off by default
+- **[GHSA-f6gg-rchx-xw8j](https://github.com/php/php-src/security/advisories/GHSA-f6gg-rchx-xw8j)**: Mixed case HTTPS and FTPS
+- **[GHSA-mmf9-xm3v-hg2x](https://github.com/php/php-src/security/advisories/GHSA-mmf9-xm3v-hg2x)**: Quadratic folded header concatenation (7.4)
+- **[GHSA-jm4m-qfqx-967m](https://github.com/php/php-src/security/advisories/GHSA-jm4m-qfqx-967m)**: FPM worker stdio pipe fd closed twice
 - **[CVE-2026-109618](https://www.cve.org/CVERecord?id=CVE-2026-109618)** / **[CVE-2026-109619](https://www.cve.org/CVERecord?id=CVE-2026-109619)** (`php2shell`, 2026-10-21): OOM corruption in mod_php/FPM and stale global state
 - **SOAP**: Restrict SOAP element lookups to XML element nodes
 

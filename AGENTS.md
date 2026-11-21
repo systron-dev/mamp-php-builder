@@ -23,7 +23,7 @@ This repository contains build scripts and documentation for compiling custom PH
 - **Install Path Convention**: MAMP Pro GUI searches directories matching:
   `^/Applications/MAMP/bin/php/php[578]\.[0-9]\.[0-9]{1,2}/bin$`
 - **Pre-releases**: Pre-releases (such as `8.6.0`) must be installed under their numeric name (e.g. `php8.6.0`). The scripts (`build-php-mamp.sh`, `compile-all-php.sh`, `package-mamp-php.sh`) automatically handle this suffix stripping.
-- **MAMP PRO GUI Compatibility Limit**: Versions `>= 8.5.0` are filtered out by MAMP PRO v6.x GUI dropdown due to internal hardcoded version checks, but work fully for CLI and custom Apache/CGI setups.
+- **MAMP PRO GUI Compatibility**: MAMP PRO v6.x GUI lists all numeric-only version directories (including `8.5.x` and `8.6.0`); only pre-release/RC suffixes (e.g. `php8.6.0RC1`) are filtered out.
 
 ## PHP 8.5 & 8.6 Specifics
 
