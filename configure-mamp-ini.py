@@ -30,7 +30,7 @@ versions = {
 # and beta builds are installed under the stripped numeric name.
 versions = {re.sub(r"^(\d+\.\d+\.\d+).*", r"\1", k): v for k, v in versions.items()}
 
-base_dir = "/Applications/MAMP/bin/php/php8.2.0/conf"
+base_dir = "/Applications/MAMP/bin/php/php8.2.35/conf"
 
 # Read base files
 with open(os.path.join(base_dir, "pear.conf"), "r") as f:
@@ -120,18 +120,18 @@ for version, ext_hash in versions.items():
     # 1. Generate pear.conf
     new_pear_conf = update_pear_conf(
         base_pear_conf,
-        "php8.2.0",
+        "php8.2.35",
         f"php{version}",
         "no-debug-non-zts-20220829",
         ext_hash
     )
-    new_pear_conf = new_pear_conf.replace("php8.2.0", f"php{version}")
+    new_pear_conf = new_pear_conf.replace("php8.2.35", f"php{version}")
     
     with open(os.path.join(target_dir, "pear.conf"), "w") as f:
         f.write(new_pear_conf)
         
     # 2. Generate php.ini
-    new_php_ini = base_php_ini.replace("php8.2.0", f"php{version}").replace("no-debug-non-zts-20220829", ext_hash)
+    new_php_ini = base_php_ini.replace("php8.2.35", f"php{version}").replace("no-debug-non-zts-20220829", ext_hash)
     
     old_ext_block_ini = """;extension=apcu.so
 
@@ -167,7 +167,7 @@ extension=pdo_pgsql.so
         f.write(new_php_ini)
         
     # 3. Generate php.ini.temp
-    new_php_ini_temp = base_php_ini_temp.replace("php8.2.0", f"php{version}").replace("no-debug-non-zts-20220829", ext_hash)
+    new_php_ini_temp = base_php_ini_temp.replace("php8.2.35", f"php{version}").replace("no-debug-non-zts-20220829", ext_hash)
     
     old_ext_block_temp = """MAMP_apc_MAMPextension=apcu.so
 
