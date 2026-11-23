@@ -9,10 +9,12 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | File | Purpose |
 |------|---------|
 | `AGENTS.md` | Guidelines, rules, and context for AI coding agents |
+| `Makefile` | Convenience targets for building dependencies, PHP, extensions, configs, `browscap.ini`, and packages |
 | `BUILD.md` | Full step-by-step guide |
 | `BUILD-NOTES.md` | Build history, lessons learned, dependency audit |
 | `build-php-mamp.sh` | Configure PHP from source (run before `make`) |
 | `build-mamp-ext.sh` | Build all C deps + PECL extensions |
+| `build-extra-ext.sh` | Build optional PHP extensions (`ffi`, `dba`, `gmp`, `mongodb`, `amqp`, `protobuf`) |
 | `build-zlib-mamp.sh` | Build zlib 1.3.2 into MAMP Library |
 | `build-deps-mamp.sh` | Phase A library modernization (OpenSSL, curl, ICU-independent libs) |
 | `build-legacy-php.sh` | Build EOL PHP 5.6 / 7.4 from security-backport branches |
@@ -21,6 +23,7 @@ MAMP PRO v6.9 no longer ships updated PHP packages — this fills the gap.
 | `build-curl-mamp.sh` | Legacy single-library libcurl rebuild (superseded by `build-deps-mamp.sh`) |
 | `compile-all-php.sh` | Orchestration script to configure, compile, and install multiple PHP versions |
 | `configure-mamp-ini.py` | Generate and inject `php.ini`, `pear.conf`, and `php.ini.temp` |
+| `update-browscap-mamp.sh` | Fetch and validate the latest `/Applications/MAMP/bin/php/browscap.ini` from browscap.org |
 | `package-mamp-php.sh` | Package builds into `dist/` tarballs with correct architecture suffix |
 | `dist/` | Pre-built archives for Apple Silicon (`arm64`) and Intel (`x86_64`) |
 
@@ -72,10 +75,13 @@ bash build-mamp-ext.sh ext
 bash build-mamp-ext.sh ext86
 
 # 4. Generate conf files (auto-enables every installed shared extension)
-python3 configure-mamp-ini.py
+python3 configure-mamp-ini.py           # or: make ini
 
-# 5. Optional: package tarballs
-./package-mamp-php.sh
+# 5. Update shared MAMP browscap.ini (editions: lite [default], special, full)
+bash update-browscap-mamp.sh            # or: make browscap (make browscap-lite / browscap-special / browscap-full)
+
+# 6. Optional: package tarballs
+./package-mamp-php.sh                   # or: make package
 ```
 
 See **[BUILD.md](BUILD.md)** for the complete guide including prerequisites, dependency build order, ICU Makefile fix, OpenSSL dylib hiding, conf file generation, macOS code-signing, and all known gotchas.

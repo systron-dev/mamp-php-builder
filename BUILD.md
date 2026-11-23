@@ -46,6 +46,7 @@ MAMP runs as a bundled app. All libraries must live inside `/Applications/MAMP/L
 ```
 /Applications/MAMP/Library/          MAMP's own lib/include/bin (MAMPLIB)
 /Applications/MAMP/bin/php/          PHP installations
+  browscap.ini                       Shared PHP browscap database (updated via update-browscap-mamp.sh / make browscap)
   php8.2.36/
     bin/php, phpize, php-config
     conf/php.ini, pear.conf, php.ini.temp
@@ -461,6 +462,20 @@ It automatically:
 To generate configurations for all versions, simply run:
 ```bash
 python3 configure-mamp-ini.py
+```
+
+### Shared `browscap.ini` Update
+
+All MAMP `php.ini` and `php.ini.temp` files reference `/Applications/MAMP/bin/php/browscap.ini` (commented out by default; MAMP ships a 2016 `Lite_PHP_BrowsCapINI` snapshot). To update `/Applications/MAMP/bin/php/browscap.ini` from `browscap.org` (checking `https://browscap.org/version-number` first to respect rate limits and verifying with `get_browser()`), choose any of the 3 official PHP editions (`lite`, `special`, or `full`):
+
+```bash
+make browscap                           # default: lite (Lite_PHP_BrowsCapINI)
+make browscap-lite                      # Lite_PHP_BrowsCapINI (lite_php_browscap.ini)
+make browscap-special                   # PHP_BrowsCapINI      (php_browscap.ini)
+make browscap-full                      # Full_PHP_BrowsCapINI (full_php_browscap.ini)
+# or via variable / script directly:
+make browscap BROWSCAP_TYPE=special
+bash update-browscap-mamp.sh [lite|special|full] [--force]
 ```
 
 ---

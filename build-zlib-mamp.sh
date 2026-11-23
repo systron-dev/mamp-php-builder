@@ -25,7 +25,9 @@ esac
 if [ ! -d "$BUILD" ]; then
   echo "==> Downloading zlib $VERSION..."
   mkdir -p "$(dirname "$BUILD")"
-  curl -fsSL "https://zlib.net/zlib-${VERSION}.tar.gz" -o "/tmp/zlib-${VERSION}.tar.gz"
+  curl -fsSL "https://zlib.net/zlib-${VERSION}.tar.gz" -o "/tmp/zlib-${VERSION}.tar.gz" \
+    || curl -fsSL "https://zlib.net/fossils/zlib-${VERSION}.tar.gz" -o "/tmp/zlib-${VERSION}.tar.gz" \
+    || curl -fsSL "https://github.com/madler/zlib/releases/download/v${VERSION}/zlib-${VERSION}.tar.gz" -o "/tmp/zlib-${VERSION}.tar.gz"
   if [ -n "$SHA256" ]; then
     echo "$SHA256  /tmp/zlib-${VERSION}.tar.gz" | shasum -a 256 -c -
   else
